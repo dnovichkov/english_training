@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Тренажёр — Игрушки и предметы в классе + Drag & Drop + TTS</title>
+<meta name="description" content="Упражнение для изучения английских названий игрушек и предметов в классе. Перетащи слово на правильную картинку.">
+<style>
+:root{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;margin:0}
+body{margin:0;padding:18px;background:#f6fbff;color:#07203a}
+.container{max-width:980px;margin:0 auto;background:#fff;padding:18px;border-radius:12px;box-shadow:0 8px 30px rgba(3,10,18,0.06)}
+h1{font-size:20px;margin:0 0 6px}
+.tiles{display:flex;gap:12px;flex-wrap:wrap;padding:12px;border-radius:10px;background:#eef2ff}
+.tile{width:120px;height:120px;border:2px solid #cbd5e1;border-radius:12px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;background:#fff;cursor:pointer}
+.tile img{max-width:100%;max-height:100%}
+.word-list{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.word{padding:6px 12px;border-radius:8px;background:#fff;border:1px solid #cbd5e1;cursor:grab;user-select:none;font-weight:700;color:#07203a}
+.word.dragging{opacity:0.5}
+.feedback{margin-top:12px;min-height:24px;font-weight:700}
+.correct{background:#dcfce7;border-color:#86efac}
+.wrong{background:#fee2e2;border-color:#fca5a5}
+.progress{height:10px;background:#e6eef6;border-radius:999px;overflow:hidden;margin-top:8px}
+.progress > i{display:block;height:100%;background:#34d399;width:0%}
+.home-btn {display:inline-block;background:#3b82f6;color:#fff;padding:8px 14px;border-radius:10px;font-weight:700;text-decoration:none;font-size:16px;box-shadow:0 4px 10px rgba(0,0,0,0.1);transition: transform 0.1s, background 0.2s;}
+.home-btn:hover {background:#2563eb;}
+.home-btn:active {transform:translateY(1px);}
+</style>
+</head>
+<body>
+<div style="margin-bottom:12px; display:flex; justify-content:flex-start">
+  <a href="index.html" class="home-btn">🏠 На главную</a>
+</div>
+
+<div class="container">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <h1>Тренажёр — Игрушки и предметы в классе</h1>
+    <div style="text-align:right">
+      <div class="progress" style="width:220px"><i id="progressBar"></i></div>
+      <div class="small">Прогресс: <strong id="progressText">0 / 0</strong></div>
+    </div>
+  </div>
+
+  <p class="small">Перетащи слово на правильную картинку. Слушай слово с помощью ▶ кнопки.</p>
+
+  <div class="tiles" id="itemTiles"></div>
+  <div class="word-list" id="wordList"></div>
+
+  <div id="feedback" class="feedback"></div>
+
+  <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+    <button id="playBtn" class="tile">▶ Прослушать</button>
+    <button id="restartBtn" class="tile">Перезапустить</button>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', ()=>{
+  const ITEMS = [
+    {word:'doll', img:'images/doll.jpg'},
+    {word:'ball', img:'images/ball.jpg'},
+    {word:'puzzle', img:'images/puzzle.jpg'},
+    {word:'desk', img:'images/desk.jpg'},
+    {word:'book', img:'images/book.jpg'},
+    {word:'pen', img:'images/pen.jpg'},
+    {word:'bag', img:'images/bag.jpg'}
+  ];
+  const MAX_SUCCESS=1;
+  const STORAGE_KEY='toys_class_trainer_v3';
+  let itemState={};
+  let remaining=[];
+  let currentWord=null;
+  let progressBar=document.getElementById('progressBar');
+  let progressText=document.getElementById('progressText');
+  let feedback=document.getElementById('feedback');
+  let itemTiles=document.getElementById('itemTiles');
+  let wordList=document.getElementById('wordList');
+
+  function loadState(){
+    try{
+      const raw=localStorage.getItem(STORAGE_KEY);
+      if(raw){ itemState=JSON.parse(raw); return; }
+    }catch(e){ console.warn(e);}
+    ITEMS.forEach(v=>itemState[v.word]={count:0});
+  }
+
+  function saveState(){ localStorage.setItem(STORAGE_KEY,JSON.stringify(itemState)); }
+
+  function prepareNext(){
+    remaining=ITEMS.filter(v=>itemState[v.word].count<MAX_SUCCESS).slice();
+    shuffleArray(remaining);
+    buildTiles();
+    buildWords();
+    updateProgress();
+    if(remaining.length>0){
+      currentWord=remaining[0].word;
+      speak(currentWord);
+    } else {
+      feedback.textContent='🎉 Поздравляем! Все слова пройдены!';
+      currentWord=null;
+    }
+  }
+
+  function buildTiles(){
+    itemTiles.innerHTML='';
+    remaining.forEach(v=>{
+      const div=document.createElement('div');
+      div.className='tile';
+      div.dataset.word=v.word;
+      const img=document.createElement('img');
+      img.src=v.img;
+      img.alt=v.word;
+      div.appendChild(img);
+      div.addEventListener('dragover',e=>e.preventDefault());
+      div.addEventListener('drop', e=>{
+        e.preventDefault();
+        const word=e.dataTransfer.getData('text/plain');
+        if(word===v.word){
+          feedback.textContent='✅ Верно!';
+          feedback.style.color='green';
+          itemState[v.word].count=Math.min(MAX_SUCCESS,itemState[v.word].count+1);
+          saveState();
+
+          // Сначала обновляем список и определяем новое слово
+          prepareNext();
+        } else {
+          feedback.textContent='❌ Ошибка, попробуй ещё раз';
+          feedback.style.color='red';
+        }
+      });
+      itemTiles.appendChild(div);
+    });
+  }
+
+  function buildWords(){
+    wordList.innerHTML='';
+    shuffleArray(remaining).forEach(v=>{
+      const div=document.createElement('div');
+      div.className='word';
+      div.textContent=v.word;
+      div.draggable=true;
+      div.addEventListener('dragstart', e=>{
+        e.dataTransfer.setData('text/plain',v.word);
+        div.classList.add('dragging');
+      });
+      div.addEventListener('dragend', e=>div.classList.remove('dragging'));
+      wordList.appendChild(div);
+    });
+  }
+
+  function updateProgress(){
+    const total=ITEMS.length*MAX_SUCCESS;
+    const done=Object.values(itemState).reduce((s,x)=>s+x.count,0);
+    const pct=total===0?0:Math.round(done/total*100);
+    progressBar.style.width=pct+'%';
+    progressText.textContent=`${done} / ${total}`;
+  }
+
+  function speak(word){
+    if('speechSynthesis' in window && word){
+      const u=new SpeechSynthesisUtterance(word);
+      u.lang='en-US';
+      u.rate=0.95;
+      speechSynthesis.cancel();
+      speechSynthesis.speak(u);
+    }
+  }
+
+  document.getElementById('playBtn').addEventListener('click',()=>{
+    if(currentWord) speak(currentWord);
+  });
+
+  document.getElementById('restartBtn').addEventListener('click',()=>{
+    if(confirm('Перезапустить прогресс?')){
+      localStorage.removeItem(STORAGE_KEY);
+      ITEMS.forEach(v=>itemState[v.word]={count:0});
+      feedback.textContent='';
+      prepareNext();
+    }
+  });
+
+  function shuffleArray(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+  loadState();
+  prepareNext();
+});
+</script>
+</body>
+</html>
