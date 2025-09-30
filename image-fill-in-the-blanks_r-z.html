@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Тренажёр правописания — Впиши буквы</title>
+<title>Тренажёр правописания — Впиши пропущенные буквы</title>
 <style>
   :root{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;}
   body{margin:0;padding:18px;background:#f5f7fb;color:#0f172a}
@@ -17,10 +17,10 @@
   .exercise-area{display:flex;gap:24px;align-items:center;flex-wrap:wrap;margin: 24px 0;}
   .image-container {flex-shrink: 0;}
   .word-image {max-width: 150px; height: auto; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);}
-  .inputs-container {display: flex; gap: 6px; align-items: center;}
-  .letter-box {width: 40px;height: 50px;border: 2px solid #cbd5e1;border-radius: 8px;display:flex;align-items:center;justify-content:center;font-size: 22px;font-weight: 700; text-transform: uppercase; background: #fff;}
+  .inputs-container {display: flex; gap: 6px; align-items: center; flex-wrap:wrap;}
+  .letter-box {width: 40px;height: 50px;border: 2px solid #cbd5e1;border-radius: 8px;display:flex;align-items:center;justify-content:center;font-size: 22px;font-weight: 700; text-transform: lowercase; background: #fff;}
   .letter-box.given {border-style: dashed; background: #f8fafc; color: #475569;}
-  .letter-box.input {text-align: center; padding: 0; caret-color: #0ea5a4;}
+  .letter-box.input {text-align: center; padding: 0; caret-color: #0ea5a4; width:40px}
   .letter-box.input:focus {outline: 2px solid #3b82f6; border-color: #3b82f6;}
   .letter-box.correct {background:#dcfce7;border-color:#86efac}
   .letter-box.wrong {background:#fee2e2;border-color:#fca5a5}
@@ -31,6 +31,16 @@
   .home-btn {display: inline-block;background: #3b82f6;color: #fff;padding: 8px 14px;border-radius: 10px;font-weight: 700;text-decoration: none;font-size: 16px;box-shadow: 0 4px 10px rgba(0,0,0,0.1);transition: transform 0.1s, background 0.2s;}
   .home-btn:hover {background: #2563eb;}
   .home-btn:active {transform: translateY(1px);}
+  /* keyboard */
+  .keyboard-wrap{margin-top:14px}
+  .keyboard{display:grid;grid-template-columns:repeat(10,1fr);gap:8px;padding:12px;border-radius:10px;background:#eef2ff;margin-top:10px}
+  .key{padding:10px;border-radius:8px;background:#fff;border:1px solid #cbd5e1;text-align:center;cursor:pointer;font-weight:700;user-select:none}
+  .key.action{background:#f3f4f6}
+  .key.wide{grid-column:span 2}
+  @media (max-width:720px){
+    .keyboard{grid-template-columns:repeat(6,1fr)}
+    .letter-box{width:36px;height:46px;font-size:20px}
+  }
 </style>
 </head>
 <body>
@@ -41,7 +51,7 @@
 
 <div class="container">
   <h1>Тренажёр правописания — Впиши пропущенные буквы</h1>
-  <p class="lead">Посмотри на картинку и впиши недостающие буквы в ячейки.</p>
+  <p class="lead">Посмотри на картинку и впиши недостающие буквы в ячейки. Можно нажимать виртуальную клавиатуру или печатать на физической.</p>
 
   <div class="topbar">
      <div class="small">Слово: <b id="currentWordIndex">№1</b></div>
@@ -55,231 +65,364 @@
     <div class="image-container">
         <img src="" alt="Изображение для слова" id="wordImage" class="word-image">
     </div>
-    <div class="inputs-container" id="inputsContainer">
-        </div>
+    <div>
+      <div class="inputs-container" id="inputsContainer"></div>
+
+      <div class="controls" style="margin-top:10px">
+        <button id="playBtn">▶ Прослушать</button>
+        <button id="checkBtn">Проверить</button>
+        <button id="clearBtn" class="secondary">Очистить</button>
+      </div>
+
+      <div id="feedback" class="status small"></div>
+    </div>
   </div>
 
-  <div>
-      <button id="checkBtn">Проверить</button>
-      <button id="restartBtn" class="secondary">Перезапустить</button>
+  <div class="keyboard-wrap">
+    <div class="small">Виртуальная клавиатура:</div>
+    <div class="keyboard" id="keyboard"></div>
   </div>
-  
-  <div class="status small" id="feedback"></div>
+
+  <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+    <button id="restartBtn" class="secondary">Перезапустить</button>
+  </div>
 
 </div>
 
 <script>
-/* ====== Настройки и слова ====== */
-// Структура:
-// word: полное правильное слово
-// partial: слово с пропусками, где _ обозначает пустую ячейку
-// image: путь к файлу картинки
-const EXERCISES = [
-  { word: "window",   partial: "w__d_w", image: "images/window.png" },
-  { word: "vest",     partial: "_e_t",   image: "images/vest.png" },
-  { word: "umbrella", partial: "_m__e__a", image: "images/umbrella.png" },
-  { word: "box",      partial: "b_x",    image: "images/box.png" },
-  { word: "zip",      partial: "__p",    image: "images/zip.png" },
-  { word: "snake",    partial: "s__k_",  image: "images/snake.png" },
-  { word: "tree",     partial: "t__e",   image: "images/tree.png" },
-  { word: "yacht",    partial: "_a_h_",  image: "images/yacht.png" },
-  { word: "rabbit",   partial: "_ _bb_t",  image: "images/rabbit.png" }
-];
-const STORAGE_KEY = 'spelling_trainer_v2_image_fill';
+document.addEventListener('DOMContentLoaded', ()=> {
+  /* ====== Настройки ====== */
+  const EXERCISES = [
+    { word: "window",   partial: "w__d_w", image: "images/window.png" },
+    { word: "vest",     partial: "_e_t",   image: "images/vest.png" },
+    { word: "umbrella", partial: "_m__e__a", image: "images/umbrella.png" },
+    { word: "box",      partial: "b_x",    image: "images/box.png" },
+    { word: "zip",      partial: "__p",    image: "images/zip.png" },
+    { word: "snake",    partial: "s__k_",  image: "images/snake.png" },
+    { word: "tree",     partial: "t__e",   image: "images/tree.png" },
+    { word: "yacht",    partial: "_a_h_",  image: "images/yacht.png" },
+    { word: "rabbit",   partial: "_ _bb_t", image: "images/rabbit.png" }
+  ];
+  const STORAGE_KEY = 'spelling_trainer_v2_image_fill';
+  const ALPHABET = 'abcdefghijklmnopqrstuvwxyz'.bsplit('');
+  const TTS_LANG = 'en-US';
+  const MAX_SUCCESS = 1;
 
-/* ====== Состояние игры ====== */
-let progressState = {}; // word -> { completed: boolean }
-let currentExerciseIndex = 0;
+  /* ====== DOM ====== */
+  const imageEl = document.getElementById('wordImage');
+  const inputsContainer = document.getElementById('inputsContainer');
+  const checkBtn = document.getElementById('checkBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const playBtn = document.getElementById('playBtn');
+  const feedback = document.getElementById('feedback');
+  const progressBar = document.getElementById('progressBar');
+  const progressText = document.getElementById('progressText');
+  const currentWordIndexLabel = document.getElementById('currentWordIndex');
+  const restartBtn = document.getElementById('restartBtn');
+  const keyboardEl = document.getElementById('keyboard');
 
-/* ====== DOM ====== */
-const imageEl = document.getElementById('wordImage');
-const inputsContainer = document.getElementById('inputsContainer');
-const checkBtn = document.getElementById('checkBtn');
-const feedback = document.getElementById('feedback');
-const progressBar = document.getElementById('progressBar');
-const progressText = document.getElementById('progressText');
-const currentWordIndexLabel = document.getElementById('currentWordIndex');
-const restartBtn = document.getElementById('restartBtn');
+  /* ====== Состояние ====== */
+  let progressState = {}; // word -> { completed: boolean }
+  let seq = []; // sequence of words to practice (words strings)
+  let currentIdx = 0;
+  let currentWord = null;
+  let chosenVoice = null;
 
-/* ====== Инициализация и работа с хранилищем ====== */
-function loadFromStorage() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return false;
-    const obj = JSON.parse(raw);
-    if (obj && obj.progressState) {
-      progressState = obj.progressState;
-      return true;
-    }
-  } catch (e) { console.warn('storage load error', e); }
-  return false;
-}
+  function saveToStorage(){ try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ progressState })); } catch(e){ } }
+  function loadFromStorage(){ try { const raw = localStorage.getItem(STORAGE_KEY); if(!raw) return false; const obj = JSON.parse(raw); if(obj && obj.progressState){ progressState = obj.progressState; return true; } } catch(e){ } return false; }
 
-function saveToStorage() {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ progressState })); } catch (e) { /* ignore */ }
-}
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]] } return a; }
 
-function initGame() {
-  const hadProgress = loadFromStorage();
-  if (!hadProgress) {
-    EXERCISES.forEach(ex => { progressState[ex.word] = { completed: false }; });
-  } else {
-    // Убедимся, что все слова из списка есть в прогрессе
-    EXERCISES.forEach(ex => { if (!progressState[ex.word]) progressState[ex.word] = { completed: false }; });
+  /* ====== TTS ====== */
+  function loadVoicesOnce(){
+    if(!('speechSynthesis' in window)) return;
+    const vs = speechSynthesis.getVoices();
+    if(vs && vs.length) chosenVoice = vs.find(v=>v.lang && v.lang.toLowerCase().startsWith('en')) || vs[0];
+    else speechSynthesis.onvoiceschanged = ()=> {
+      const vs2 = speechSynthesis.getVoices();
+      chosenVoice = vs2.find(v=>v.lang && v.lang.toLowerCase().startsWith('en')) || vs2[0];
+    };
   }
-  
-  // Найти первое невыполненное упражнение
-  currentExerciseIndex = EXERCISES.findIndex(ex => !progressState[ex.word].completed);
-  if (currentExerciseIndex === -1) {
-      currentExerciseIndex = 0; // Все выполнено, начнем с начала или покажем экран победы
+  function speak(word){
+    if(!('speechSynthesis' in window)) { feedback.textContent = 'TTS не поддерживается в этом браузере.'; return; }
+    const utt = new SpeechSynthesisUtterance(word);
+    utt.lang = TTS_LANG;
+    utt.rate = 0.95;
+    if(chosenVoice) utt.voice = chosenVoice;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(utt);
   }
-  
-  loadExercise(currentExerciseIndex);
-  updateProgress();
-}
 
-/* ====== Логика игры ====== */
-function loadExercise(index) {
-    if (index >= EXERCISES.length) {
-        finishGame();
-        return;
-    }
-
-    const exercise = EXERCISES[index];
-    currentExerciseIndex = index;
-
-    imageEl.src = exercise.image;
-    imageEl.alt = `Изображение: ${exercise.word}`;
-    currentWordIndexLabel.textContent = `№${index + 1}`;
-    feedback.textContent = '';
-    checkBtn.disabled = false;
-
-    inputsContainer.innerHTML = '';
-    const partial = exercise.partial.replace(/\s/g, '_'); // Заменяем пробелы на подчеркивания для единообразия
-
-    for (let i = 0; i < partial.length; i++) {
-        const char = partial[i];
-        let el;
-        if (char === '_') {
-            el = document.createElement('input');
-            el.type = 'text';
-            el.className = 'letter-box input';
-            el.maxLength = 1;
-            el.dataset.index = i;
-            
-            // Авто-переход к следующему полю ввода
-            el.addEventListener('input', (e) => {
-                const target = e.target;
-                if (target.value.length === target.maxLength) {
-                    const nextInput = inputsContainer.querySelector(`input[data-index="${parseInt(target.dataset.index) + 1}"]`);
-                    if (nextInput) {
-                        nextInput.focus();
-                    } else {
-                        target.blur(); // Последнее поле, убираем фокус
-                    }
-                }
-            });
-
-        } else {
-            el = document.createElement('span');
-            el.className = 'letter-box given';
-            el.textContent = char;
-        }
-        inputsContainer.appendChild(el);
-    }
-    
-    // Фокус на первом поле ввода
-    const firstInput = inputsContainer.querySelector('input');
-    if (firstInput) firstInput.focus();
-}
-
-function checkAnswer() {
-    const exercise = EXERCISES[currentExerciseIndex];
-    const inputs = inputsContainer.querySelectorAll('.letter-box');
-    
-    let userAnswer = '';
-    let allFilled = true;
-    inputs.forEach(el => {
-        if (el.tagName === 'INPUT') {
-            if (el.value === '') allFilled = false;
-            userAnswer += el.value.toLowerCase();
-        } else {
-            userAnswer += el.textContent.toLowerCase();
-        }
-    });
-
-    if (!allFilled) {
-        feedback.innerHTML = '<span style="color:#b45309">Заполните все ячейки.</span>';
-        return;
-    }
-
-    if (userAnswer === exercise.word) {
-        feedback.innerHTML = '<span style="color:green;font-weight:600">Верно! Отлично! 🎉</span>';
-        progressState[exercise.word].completed = true;
-        saveToStorage();
-        updateProgress();
-        checkBtn.disabled = true;
-
-        inputs.forEach(el => el.classList.add('correct'));
-
-        setTimeout(() => {
-            let nextIndex = EXERCISES.findIndex(ex => !progressState[ex.word].completed);
-            if (nextIndex === -1) {
-                finishGame();
-            } else {
-                loadExercise(nextIndex);
-            }
-        }, 1200);
-
+  /* ====== Инициализация прогресса/очереди ====== */
+  function initState(){
+    const had = loadFromStorage();
+    if(!had){
+      EXERCISES.forEach(e => progressState[e.word] = { completed: false });
     } else {
-        feedback.innerHTML = '<span style="color:#b91c1c">Ошибка, попробуй еще раз.</span>';
-        inputs.forEach(el => {
-            if (el.tagName === 'INPUT') {
-                el.classList.add('wrong');
-            }
-        });
-        setTimeout(() => inputs.forEach(el => el.classList.remove('wrong')), 800);
+      EXERCISES.forEach(e => { if(progressState[e.word] === undefined) progressState[e.word] = { completed: false }; });
     }
-}
+    prepareSeq();
+  }
+  function prepareSeq(){
+    const pending = EXERCISES.filter(e => !progressState[e.word].completed).map(e => e.word);
+    seq = shuffle(pending.slice());
+    currentIdx = 0;
+  }
 
-function updateProgress() {
+  /* ====== Рендер клавиатуры ====== */
+  function buildKeyboard(){
+    keyboardEl.innerHTML = '';
+    // rows of letters (we'll just linear a-z)
+    ALPHABET.forEach(ch => {
+      const b = document.createElement('div');
+      b.className = 'key';
+      b.textContent = ch;
+      b.addEventListener('click', ()=> onVirtualKey(ch));
+      keyboardEl.appendChild(b);
+    });
+    // backspace
+    const back = document.createElement('div');
+    back.className = 'key action wide';
+    back.textContent = '⌫';
+    back.addEventListener('click', ()=> onVirtualKey('Backspace'));
+    keyboardEl.appendChild(back);
+    // enter
+    const ent = document.createElement('div');
+    ent.className = 'key action wide';
+    ent.textContent = 'Enter';
+    ent.addEventListener('click', ()=> onVirtualKey('Enter'));
+    keyboardEl.appendChild(ent);
+  }
+
+  /* ====== Загрузка текущего упражнения ====== */
+  function loadCurrent(){
+    // if seq empty, prepare again
+    if(!seq || seq.length === 0) prepareSeq();
+    if(seq.length === 0){
+      // всё пройдено
+      imageEl.src = '';
+      imageEl.alt = '';
+      inputsContainer.innerHTML = '';
+      feedback.innerHTML = '<b>Поздравляем! Все упражнения пройдены 🎉</b>';
+      updateProgress();
+      return;
+    }
+    currentWord = seq[currentIdx % seq.length];
+    const item = EXERCISES.find(e => e.word === currentWord);
+    if(!item) return;
+    imageEl.src = item.image;
+    imageEl.alt = item.word;
+    currentWordIndexLabel.textContent = `№${EXERCISES.findIndex(e=>e.word===item.word)+1}`;
+    setupInputs(item.partial, item.word);
+    updateProgress();
+    setTimeout(()=> speak(item.word), 200);
+  }
+
+  /* ====== Построение полей ввода с частично заполненными буквами ====== */
+  function setupInputs(partial, fullWord){
+    inputsContainer.innerHTML = '';
+    // normalize spaces to underscores
+    const pattern = partial.replace(/\s/g, '_');
+    for(let i=0;i<pattern.length;i++){
+      const ch = pattern[i];
+      if(ch === '_'){
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.maxLength = 1;
+        inp.className = 'letter-box input';
+        inp.dataset.pos = i;
+        // allow mobile better input
+        inp.inputMode = 'text';
+        inp.autocomplete = 'off';
+        // listeners
+        inp.addEventListener('input', (e)=>{
+          const v = e.target.value;
+          if(v.length > 0){
+            e.target.value = v.slice(-1).toLowerCase();
+            // move focus to next input if exists
+            const next = inputsContainer.querySelector(`input[data-pos="${parseInt(e.target.dataset.pos)+1}"]`);
+            if(next) next.focus();
+            else e.target.blur();
+          }
+        });
+        inp.addEventListener('keydown', (e)=>{
+          if(e.key === 'Backspace' && e.target.value === ''){
+            // if empty, move to previous
+            const prev = inputsContainer.querySelector(`input[data-pos="${parseInt(e.target.dataset.pos)-1}"]`);
+            if(prev){ prev.focus(); prev.value=''; e.preventDefault(); }
+          }
+        });
+        inputsContainer.appendChild(inp);
+      } else {
+        const span = document.createElement('div');
+        span.className = 'letter-box given';
+        span.textContent = ch;
+        inputsContainer.appendChild(span);
+      }
+    }
+    // focus first input if exists
+    const first = inputsContainer.querySelector('input');
+    if(first) first.focus();
+  }
+
+  /* ====== Вставка буквы (виртуальная клавиатура) ====== */
+  function onVirtualKey(key){
+    if(key === 'Backspace'){
+      handleBackspace();
+      return;
+    }
+    if(key === 'Enter'){
+      checkAnswer();
+      return;
+    }
+    // letter
+    const active = document.activeElement;
+    if(active && active.tagName === 'INPUT' && inputsContainer.contains(active)){
+      active.value = key;
+      // move to next input
+      const next = inputsContainer.querySelector(`input[data-pos="${parseInt(active.dataset.pos)+1}"]`);
+      if(next) next.focus(); else active.blur();
+    } else {
+      // insert into first empty input
+      const firstEmpty = Array.from(inputsContainer.querySelectorAll('input')).find(i=>!i.value);
+      if(firstEmpty){
+        firstEmpty.value = key;
+        const next = inputsContainer.querySelector(`input[data-pos="${parseInt(firstEmpty.dataset.pos)+1}"]`);
+        if(next) next.focus(); else firstEmpty.blur();
+      }
+    }
+  }
+
+  function handleBackspace(){
+    const active = document.activeElement;
+    if(active && active.tagName === 'INPUT' && inputsContainer.contains(active)){
+      if(active.value){
+        active.value = '';
+      } else {
+        const prev = inputsContainer.querySelector(`input[data-pos="${parseInt(active.dataset.pos)-1}"]`);
+        if(prev){ prev.focus(); prev.value=''; }
+      }
+    } else {
+      // delete last filled
+      const inputs = Array.from(inputsContainer.querySelectorAll('input'));
+      for(let i=inputs.length-1;i>=0;i--){
+        if(inputs[i].value){
+          inputs[i].value = '';
+          inputs[i].focus();
+          break;
+        }
+      }
+    }
+  }
+
+  /* ====== Проверка ответа ====== */
+  function checkAnswer(){
+    const item = EXERCISES.find(e=>e.word===currentWord);
+    if(!item) return;
+    const nodes = Array.from(inputsContainer.children);
+    let user = '';
+    let allFilled = true;
+    nodes.forEach(node=>{
+      if(node.tagName === 'INPUT'){
+        const v = (node.value || '').toLowerCase();
+        if(!v) allFilled = false;
+        user += v;
+      } else {
+        user += node.textContent.toLowerCase();
+      }
+    });
+    if(!allFilled){
+      feedback.innerHTML = '<span style="color:#b45309">Заполните все ячейки.</span>';
+      return;
+    }
+    if(user === item.word){
+      feedback.innerHTML = '<span style="color:green;font-weight:600">Верно! Отлично! 🎉</span>';
+      // mark completed
+      progressState[item.word] = { completed: true };
+      saveToStorage();
+      // show correct style briefly
+      nodes.forEach(n => n.classList.add('correct'));
+      updateProgress();
+      setTimeout(()=>{
+        // load next pending
+        const nextIndex = seq.findIndex(w => !progressState[w] || !progressState[w].completed);
+        if(nextIndex === -1){
+          // all done
+          loadCurrent(); // will show finished screen
+        } else {
+          // rotate seq to start from nextIndex
+          // find position of that word in seq
+          seq = seq.slice(nextIndex).concat(seq.slice(0,nextIndex));
+          currentIdx = 0;
+          loadCurrent();
+        }
+      }, 900);
+    } else {
+      feedback.innerHTML = '<span style="color:#b91c1c">Ошибка, попробуй ещё раз.</span>';
+      // mark wrong
+      nodes.forEach(n => { if(n.tagName==='INPUT') n.classList.add('wrong'); });
+      setTimeout(()=> nodes.forEach(n => n.classList.remove('wrong')), 800);
+    }
+  }
+
+  /* ====== Очистка полей ====== */
+  function clearInputs(){
+    const inputs = inputsContainer.querySelectorAll('input');
+    inputs.forEach(i => i.value = '');
+    const first = inputsContainer.querySelector('input');
+    if(first) first.focus();
+    feedback.textContent = '';
+  }
+
+  /* ====== Прогресс ====== */
+  function updateProgress(){
     const total = EXERCISES.length;
-    const completed = Object.values(progressState).filter(s => s.completed).length;
-    const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-    
+    const completed = Object.values(progressState).filter(s=>s.completed).length;
+    const pct = total>0 ? Math.round((completed/total)*100) : 0;
     progressBar.style.width = pct + '%';
     progressText.textContent = `${completed} / ${total}`;
-}
+    // refresh seq to remove completed words
+    seq = seq.filter(w => !progressState[w] || !progressState[w].completed);
+  }
 
-function finishGame() {
-    inputsContainer.innerHTML = '';
-    imageEl.style.display = 'none';
-    checkBtn.style.display = 'none';
-    currentWordIndexLabel.textContent = '—';
-    feedback.innerHTML = '<b>Поздравляем! Все слова отгаданы! 👍</b>';
-}
-
-/* ====== События ====== */
-checkBtn.addEventListener('click', checkAnswer);
-// Позволяет нажимать Enter для проверки
-inputsContainer.addEventListener('keyup', (e) => {
-    if (e.key === 'Enter') {
-        checkBtn.click();
+  /* ====== Events & keyboard handling ====== */
+  // virtual keys already bound in buildKeyboard
+  // physical keyboard
+  document.addEventListener('keydown', (ev)=>{
+    const k = ev.key;
+    if(k.length === 1 && /^[a-zA-Z]$/.test(k)){
+      onVirtualKey(k.toLowerCase());
+      ev.preventDefault();
+      return;
     }
-});
-restartBtn.addEventListener('click', () => {
-    if (confirm('Начать заново и сбросить весь прогресс?')) {
-        localStorage.removeItem(STORAGE_KEY);
-        progressState = {}; // Очищаем состояние
-        initGame();
-        imageEl.style.display = 'block';
-        checkBtn.style.display = 'inline-block';
+    if(k === 'Backspace'){ handleBackspace(); ev.preventDefault(); return; }
+    if(k === 'Enter'){ checkAnswer(); ev.preventDefault(); return; }
+  });
+
+  playBtn.addEventListener('click', ()=> { if(currentWord) speak(currentWord); });
+  checkBtn.addEventListener('click', checkAnswer);
+  clearBtn.addEventListener('click', clearInputs);
+  restartBtn.addEventListener('click', ()=>{
+    if(confirm('Начать заново и сбросить весь прогресс?')){
+      localStorage.removeItem(STORAGE_KEY);
+      progressState = {};
+      initState();
+      updateProgress();
+      loadCurrent();
+      feedback.textContent = '';
     }
+  });
+
+  /* ====== Init ====== */
+  buildKeyboard();
+  loadVoicesOnce();
+  initState();
+  updateProgress();
+  loadCurrent();
+  // save on unload as safety
+  window.addEventListener('beforeunload', ()=> saveToStorage());
 });
-
-/* ====== Запуск ====== */
-initGame();
-
 </script>
+
 </body>
 </html>
