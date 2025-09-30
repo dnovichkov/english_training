@@ -29,9 +29,29 @@
   .word-card{padding:12px;border-radius:10px;background:#f8fafc;border:1px solid #e2e8f0}
   .counts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   .badge{padding:6px 8px;border-radius:999px;background:#e6eef8;color:#0f172a;font-weight:600;border:1px solid #dbeafe}
+  .home-btn {
+  display: inline-block;
+  background: #3b82f6; /* синий, заметный */
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-weight: 700;
+  text-decoration: none;
+  font-size: 16px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+  transition: transform 0.1s, background 0.2s;
+}
+.home-btn:hover {
+  background: #2563eb;
+}
+.home-btn:active {
+  transform: translateY(1px);
 </style>
 </head>
 <body>
+<div style="margin-bottom:12px; display:flex; justify-content:flex-start">
+  <a href="index.html" class="home-btn">🏠 На главную</a>
+</div>
 <div class="container">
   <h1>Тренажёр правописания — слушай и собирай</h1>
   <p class="lead">Текст слова не отображается. Слушай слово ► и собирай буквы по слуху. Прогресс виден, но полного списка слов — нет.</p>

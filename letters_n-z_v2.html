@@ -33,9 +33,29 @@
   button.cta{background:#10b981;color:#fff;border:0;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:700}
   button.ghost{background:#6b7280;color:#fff;border:0;padding:8px 12px;border-radius:8px;cursor:pointer}
   @media (max-width:720px){ .slots{overflow-x:auto;padding-bottom:6px} .alpha-btn{min-width:34px;padding:6px} }
+  .home-btn {
+  display: inline-block;
+  background: #3b82f6; /* синий, заметный */
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-weight: 700;
+  text-decoration: none;
+  font-size: 16px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+  transition: transform 0.1s, background 0.2s;
+}
+.home-btn:hover {
+  background: #2563eb;
+}
+.home-btn:active {
+  transform: translateY(1px);
 </style>
 </head>
 <body>
+<div style="margin-bottom:12px; display:flex; justify-content:flex-start">
+  <a href="index.html" class="home-btn">🏠 На главную</a>
+</div>
 <div class="container">
   <div class="top">
     <h1>Тренажёр — алфавит + TTS + прогресс</h1>
