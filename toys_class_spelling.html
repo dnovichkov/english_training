@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Тренажёр — Игрушки и предметы в классе (Spelling + Letter Animation)</title>
+<style>
+:root{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;margin:0}
+body{margin:0;padding:18px;background:#f6fbff;color:#07203a}
+.container{max-width:980px;margin:0 auto;background:#fff;padding:18px;border-radius:12px;box-shadow:0 8px 30px rgba(3,10,18,0.06)}
+h1{font-size:20px;margin:0 0 6px}
+.top{display:flex;gap:12px;align-items:center;justify-content:space-between}
+.slots{display:flex;gap:8px;flex-wrap:nowrap;margin-bottom:8px}
+.slot{width:50px;height:60px;border:2px dashed #cbd5e1;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;background:#f8fafc;user-select:none;transition:background 0.3s, border-color 0.3s;}
+.slot.filled{border-style:solid;background:#fff}
+.controls{display:flex;gap:8px;align-items:center;margin-top:8px}
+.small{font-size:13px;color:#475569}
+.status{margin-top:12px;min-height:24px;font-weight:700}
+.correct{background:#dcfce7;border-color:#86efac}
+.wrong{background:#fee2e2;border-color:#fca5a5}
+.tiles{display:flex;gap:8px;flex-wrap:wrap;padding:12px;border-radius:10px;background:#eef2ff}
+.alpha-btn{
+  min-width:40px;height:40px;padding:6px 8px;border-radius:8px;background:#fff;border:1px solid #cbd5e1;
+  cursor:pointer;font-weight:700;display:inline-flex;align-items:center;justify-content:center;line-height:1;box-sizing:border-box;color:#07203a;font-size:16px;
+}
+.alpha-btn:active{transform:translateY(1px)}
+.progress{height:10px;background:#e6eef6;border-radius:999px;overflow:hidden;margin-top:8px}
+.progress > i{display:block;height:100%;background:#34d399;width:0%}
+.home-btn {display:inline-block;background:#3b82f6;color:#fff;padding:8px 14px;border-radius:10px;font-weight:700;text-decoration:none;font-size:16px;box-shadow:0 4px 10px rgba(0,0,0,0.1);transition: transform 0.1s, background 0.2s;}
+.home-btn:hover {background:#2563eb;}
+.home-btn:active {transform:translateY(1px);}
+</style>
+</head>
+<body>
+<div style="margin-bottom:12px; display:flex; justify-content:flex-start">
+  <a href="index.html" class="home-btn">🏠 На главную</a>
+</div>
+
+<div class="container">
+  <div class="top">
+    <h1>Тренажёр — Игрушки и предметы в классе (Spelling + Letter Animation)</h1>
+    <div style="text-align:right">
+      <div class="progress" style="width:220px"><i id="progressBar"></i></div>
+      <div class="small">Прогресс: <strong id="progressText">0 / 0</strong></div>
+    </div>
+  </div>
+
+  <p class="small">Слушай слово и набирай его буквами из клавиатуры (или с экрана). Backspace — удалить, Enter — проверить.</p>
+
+  <div class="slots" id="slotsContainer"></div>
+
+  <div class="tiles" id="alphabetContainer" aria-label="Алфавит"></div>
+
+  <div class="controls">
+    <button id="playBtn" class="alpha-btn">▶ Прослушать</button>
+    <button id="checkBtn" class="alpha-btn">Проверить</button>
+    <button id="clearBtn" class="alpha-btn">Очистить</button>
+    <button id="restartBtn" class="alpha-btn">Перезапустить</button>
+  </div>
+
+  <div id="feedback" class="status"></div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', ()=>{
+  const WORDS = ["ball","doll","pencil","eraser","chair","book"];
+  const MAX_SUCCESS = 2;
+  const ALPHABET = 'abcdefghijklmnopqrstuvwxyz'.split('');
+  const STORAGE_KEY = 'toys_class_spelling_v2';
+
+  let wordState = {};
+  let remainingSeq = [];
+  let currentWord = null;
+
+  const slotsContainer = document.getElementById('slotsContainer');
+  const alphabetContainer = document.getElementById('alphabetContainer');
+  const feedback = document.getElementById('feedback');
+  const progressBar = document.getElementById('progressBar');
+  const progressText = document.getElementById('progressText');
+  const playBtn = document.getElementById('playBtn');
+  const checkBtn = document.getElementById('checkBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const restartBtn = document.getElementById('restartBtn');
+
+  function loadState(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw){ wordState = JSON.parse(raw); return; }
+    }catch(e){ console.warn(e);}
+    WORDS.forEach(w=>wordState[w]={count:0});
+  }
+
+  function saveState(){ localStorage.setItem(STORAGE_KEY,JSON.stringify(wordState)); }
+
+  function prepareNextSeq(){
+    remainingSeq=[];
+    WORDS.forEach(w=>{
+      const repeats = MAX_SUCCESS - (wordState[w].count||0);
+      for(let i=0;i<repeats;i++) remainingSeq.push(w);
+    });
+    shuffleArray(remainingSeq);
+    loadNextWord();
+  }
+
+  function loadNextWord(){
+    if(remainingSeq.length===0){
+      feedback.textContent = '🎉 Поздравляем! Все слова введены дважды!';
+      currentWord=null;
+      updateProgress();
+      return;
+    }
+    currentWord = remainingSeq.shift();
+    setupSlots(currentWord);
+    speak(currentWord);
+    updateProgress();
+  }
+
+  function setupSlots(word){
+    slotsContainer.innerHTML='';
+    for(let i=0;i<word.length;i++){
+      const s=document.createElement('div');
+      s.className='slot';
+      s.dataset.expected=word[i];
+      s.addEventListener('click', ()=>{
+        if(s.textContent){ s.textContent=''; s.classList.remove('filled','correct','wrong'); }
+      });
+      slotsContainer.appendChild(s);
+    }
+  }
+
+  function insertLetter(ch){
+    const slot = Array.from(slotsContainer.children).find(s=>!s.textContent);
+    if(slot){
+      slot.textContent = ch;
+      slot.classList.add('filled');
+    }
+  }
+
+  function lastFilledSlot(){
+    const arr = Array.from(slotsContainer.children);
+    for(let i=arr.length-1;i>=0;i--) if(arr[i].textContent) return arr[i];
+    return null;
+  }
+
+  function checkAnswer(){
+    if(!currentWord) return;
+    const slots = Array.from(slotsContainer.children);
+    if(slots.some(s=>!s.textContent)){
+      feedback.textContent='❌ Заполните все слоты.';
+      return;
+    }
+    let ok=true;
+    slots.forEach((s,i)=>{
+      if(s.textContent===currentWord[i]){
+        s.classList.remove('wrong'); s.classList.add('correct');
+      }else{
+        s.classList.remove('correct'); s.classList.add('wrong');
+        ok=false;
+      }
+    });
+    if(ok){
+      feedback.textContent='✅ Верно!';
+      wordState[currentWord].count = Math.min(MAX_SUCCESS, wordState[currentWord].count+1);
+      saveState();
+      setTimeout(loadNextWord, 900); // загружаем следующее слово без озвучивания
+    }else{
+      feedback.textContent='❌ Есть ошибки, попробуйте снова.';
+    }
+    updateProgress();
+  }
+
+
+
+  function animateLetters(word, callback){
+    const slots = Array.from(slotsContainer.children);
+    let i=0;
+    function speakLetter(){
+      if(i>=word.length){
+        callback();
+        return;
+      }
+      slots[i].classList.add('correct');
+      speak(word[i]);
+      i++;
+      setTimeout(speakLetter, 600);
+    }
+    speakLetter();
+  }
+
+  function updateProgress(){
+    const total = WORDS.length*MAX_SUCCESS;
+    const done = Object.values(wordState).reduce((sum,x)=>sum+x.count,0);
+    const pct = Math.round(done/total*100);
+    progressBar.style.width=pct+'%';
+    progressText.textContent=`${done} / ${total}`;
+  }
+
+  function buildAlphabet(){
+    alphabetContainer.innerHTML='';
+    ALPHABET.forEach(ch=>{
+      const btn=document.createElement('button');
+      btn.type='button';
+      btn.className='alpha-btn';
+      btn.textContent = ch;
+      btn.addEventListener('click', ()=> insertLetter(ch));
+      alphabetContainer.appendChild(btn);
+    });
+  }
+
+  function speak(word){
+    if('speechSynthesis' in window){
+      const u = new SpeechSynthesisUtterance(word);
+      u.lang='en-US'; u.rate=0.95;
+      speechSynthesis.cancel(); speechSynthesis.speak(u);
+    }
+  }
+
+  playBtn.addEventListener('click', ()=> { if(currentWord) speak(currentWord); });
+  checkBtn.addEventListener('click', checkAnswer);
+  clearBtn.addEventListener('click', ()=>{ Array.from(slotsContainer.children).forEach(s=>{ s.textContent=''; s.classList.remove('filled','correct','wrong'); }); feedback.textContent=''; });
+  restartBtn.addEventListener('click', ()=>{
+    if(confirm('Перезапустить прогресс?')){
+      localStorage.removeItem(STORAGE_KEY);
+      WORDS.forEach(w=>wordState[w]={count:0});
+      feedback.textContent='';
+      prepareNextSeq();
+    }
+  });
+
+  document.addEventListener('keydown', (e)=>{
+    if(!currentWord) return;
+    const k = e.key.toLowerCase();
+    if(k==='backspace'){ const slot=lastFilledSlot(); if(slot){ slot.textContent=''; slot.classList.remove('filled','correct','wrong'); } }
+    else if(k==='enter'){ checkAnswer(); }
+    else if(k.length===1 && ALPHABET.includes(k)){ insertLetter(k); }
+  });
+
+  function shuffleArray(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+  loadState();
+  buildAlphabet();
+  prepareNextSeq();
+});
+</script>
+</body>
+</html>
