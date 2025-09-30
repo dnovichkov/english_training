@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Тренажёр — Как дела? Spelling + TTS</title>
+<style>
+:root{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;margin:0}
+body{margin:0;padding:18px;background:#f6fbff;color:#07203a}
+.container{max-width:980px;margin:0 auto;background:#fff;padding:18px;border-radius:12px;box-shadow:0 8px 30px rgba(3,10,18,0.06)}
+h1{font-size:20px;margin:0 0 6px}
+.top{display:flex;gap:12px;align-items:center;justify-content:space-between}
+.slots{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.slot{width:40px;height:50px;border:2px dashed #cbd5e1;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;background:#f8fafc;user-select:none}
+.slot.filled{border-style:solid;background:#fff}
+.tiles{display:flex;gap:6px;flex-wrap:wrap;padding:12px;border-radius:10px;background:#eef2ff;margin-top:12px}
+.alpha-btn{
+  min-width:36px;height:40px;padding:6px 8px;border-radius:8px;background:#fff;border:1px solid #cbd5e1;
+  cursor:pointer;font-weight:700;color:#07203a;font-size:16px;display:inline-flex;align-items:center;justify-content:center;line-height:1;box-sizing:border-box;
+}
+.alpha-btn:active{transform:translateY(1px)}
+.feedback{margin-top:12px;min-height:24px;font-weight:700}
+.progress{height:10px;background:#e6eef6;border-radius:999px;overflow:hidden;margin-top:8px}
+.progress > i{display:block;height:100%;background:#34d399;width:0%}
+.home-btn {display:inline-block;background:#3b82f6;color:#fff;padding:8px 14px;border-radius:10px;font-weight:700;text-decoration:none;font-size:16px;box-shadow:0 4px 10px rgba(0,0,0,0.1);transition: transform 0.1s, background 0.2s;}
+.home-btn:hover {background:#2563eb;}
+.home-btn:active {transform:translateY(1px);}
+</style>
+</head>
+<body>
+<div style="margin-bottom:12px; display:flex; justify-content:flex-start">
+  <a href="index.html" class="home-btn">🏠 На главную</a>
+</div>
+
+<div class="container">
+  <div class="top">
+    <h1>Тренажёр — Как дела? Spelling</h1>
+    <div style="text-align:right">
+      <div class="progress" style="width:220px"><i id="progressBar"></i></div>
+      <div class="small">Прогресс: <strong id="progressText">0 / 0</strong></div>
+    </div>
+  </div>
+
+  <p class="small">Набирай фразу буквами на экранной клавиатуре или с физической. Backspace — удалить, Enter — проверить.</p>
+
+  <div class="slots" id="slotsContainer"></div>
+
+  <div class="tiles" id="keyboardContainer"></div>
+
+  <div style="margin-top:12px; display:flex; gap:6px">
+    <button id="playBtn" class="alpha-btn">▶ Прослушать</button>
+    <button id="checkBtn" class="alpha-btn">Проверить</button>
+    <button id="clearBtn" class="alpha-btn">Очистить</button>
+    <button id="restartBtn" class="alpha-btn">Перезапустить</button>
+  </div>
+
+  <div id="feedback" class="feedback"></div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', ()=>{
+  const PHRASES = ["how are you?", "i'm fine", "thank you", "and you?", "I'm happy", "I'm sad"];
+  const MAX_SUCCESS = 1;
+  const STORAGE_KEY = 'how_are_you_spelling_v1';
+  const ALPHABET = 'abcdefghijklmnopqrstuvwxyz\' ?'.split('');
+  let state = {}, remaining = [], current = null, wordCounter = 0;
+
+  const slotsContainer = document.getElementById('slotsContainer');
+  const keyboardContainer = document.getElementById('keyboardContainer');
+  const feedback = document.getElementById('feedback');
+  const progressBar = document.getElementById('progressBar');
+  const progressText = document.getElementById('progressText');
+
+  function loadState(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw) state = JSON.parse(raw);
+    }catch(e){}
+    PHRASES.forEach(p=>{ if(!state[p]) state[p]={count:0}; });
+  }
+
+  function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+  function prepareNext(){
+    remaining = PHRASES.filter(p=> state[p].count < MAX_SUCCESS).slice();
+    shuffleArray(remaining);
+    loadNext();
+    updateProgress();
+  }
+
+  function loadNext(){
+    if(!remaining.length){ feedback.textContent='🎉 Все фразы набраны дважды!'; slotsContainer.innerHTML=''; return; }
+    current = remaining.shift();
+    wordCounter++;
+    setupSlots(current);
+    speak(current); // Авто-проигрывание
+  }
+
+  function setupSlots(word){
+    slotsContainer.innerHTML='';
+    for(let i=0;i<word.length;i++){
+      const s = document.createElement('div');
+      s.className='slot';
+      s.dataset.expected = word[i];
+      s.addEventListener('click', ()=> { s.textContent=''; s.classList.remove('filled','correct','wrong'); });
+      slotsContainer.appendChild(s);
+    }
+  }
+
+  function buildKeyboard(){
+    keyboardContainer.innerHTML='';
+    ALPHABET.forEach(ch=>{
+      const btn = document.createElement('button');
+      btn.className='alpha-btn';
+      btn.textContent = ch===' '?'␣':ch;
+      btn.addEventListener('click', ()=> insertLetter(ch));
+      keyboardContainer.appendChild(btn);
+    });
+  }
+
+  function insertLetter(ch){
+    const slot = Array.from(slotsContainer.children).find(s=>!s.textContent);
+    if(!slot) return;
+    slot.textContent = ch;
+    slot.classList.add('filled');
+  }
+
+  function lastFilledSlot(){
+    const arr = Array.from(slotsContainer.children);
+    for(let i=arr.length-1;i>=0;i--) if(arr[i].textContent) return arr[i];
+    return null;
+  }
+
+  function checkAnswer(){
+    const slots = Array.from(slotsContainer.children);
+    const formed = slots.map((s,i) => s.textContent || (s.dataset.expected === ' ' ? ' ' : '')).join('');
+    if(formed.includes('') && formed !== current){
+      feedback.textContent='Заполните все слоты';
+      feedback.style.color='red';
+      return;
+    }
+    if(formed === current){
+      feedback.textContent='✅ Верно!';
+      feedback.style.color='green';
+      state[current].count = Math.min(MAX_SUCCESS, state[current].count+1);
+      saveState();
+      updateProgress();
+      setTimeout(()=> loadNext(), 800);
+    }else{
+      feedback.textContent='❌ Ошибка, попробуй ещё раз';
+      feedback.style.color='red';
+    }
+  }
+
+
+  function clearSlots(){ Array.from(slotsContainer.children).forEach(s=>{ s.textContent=''; s.classList.remove('filled','correct','wrong'); }); feedback.textContent=''; }
+
+  function restartAll(){ if(confirm('Перезапустить прогресс?')){ localStorage.removeItem(STORAGE_KEY); state={}; PHRASES.forEach(p=>state[p]={count:0}); prepareNext(); } }
+
+  function updateProgress(){
+    const total = PHRASES.length * MAX_SUCCESS;
+    const done = Object.values(state).reduce((s,x)=>s+x.count,0);
+    const pct = total? Math.round(done/total*100):0;
+    progressBar.style.width = pct+'%';
+    progressText.textContent = `${done} / ${total}`;
+  }
+
+  function speak(word){
+    if('speechSynthesis' in window){ const u = new SpeechSynthesisUtterance(word); u.lang='en-US'; u.rate=0.95; speechSynthesis.cancel(); speechSynthesis.speak(u); }
+  }
+
+  document.getElementById('playBtn').addEventListener('click', ()=>{ if(current) speak(current); });
+  document.getElementById('checkBtn').addEventListener('click', checkAnswer);
+  document.getElementById('clearBtn').addEventListener('click', clearSlots);
+  document.getElementById('restartBtn').addEventListener('click', restartAll);
+
+  document.addEventListener('keydown', (ev)=>{
+    const k = ev.key.toLowerCase();
+    if(k.length===1 && /^[a-z' ]$/.test(k)){
+      insertLetter(k===' '?' ':k);
+      ev.preventDefault();
+    }
+    if(ev.key==='Backspace'){ const last=lastFilledSlot(); if(last){ last.textContent=''; last.classList.remove('filled','correct','wrong'); } ev.preventDefault();}
+    if(ev.key==='Enter'){ checkAnswer(); ev.preventDefault();}
+  });
+
+  function shuffleArray(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+  loadState();
+  buildKeyboard();
+  prepareNext();
+});
+</script>
+</body>
+</html>

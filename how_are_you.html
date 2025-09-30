@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Тренажёр — Как дела?</title>
+<style>
+:root{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;margin:0}
+body{margin:0;padding:18px;background:#f6fbff;color:#07203a}
+.container{max-width:980px;margin:0 auto;background:#fff;padding:18px;border-radius:12px;box-shadow:0 8px 30px rgba(3,10,18,0.06)}
+h1{font-size:20px;margin:0 0 6px}
+.top{display:flex;gap:12px;align-items:center;justify-content:space-between}
+.choices{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
+.choice{padding:12px 18px;border-radius:8px;background:#fff;border:1px solid #cbd5e1;cursor:pointer;font-weight:700;user-select:none}
+.choice.correct{background:#dcfce7;border-color:#86efac}
+.choice.wrong{background:#fee2e2;border-color:#fca5a5}
+.progress{height:10px;background:#e6eef6;border-radius:999px;overflow:hidden;margin-top:8px}
+.progress > i{display:block;height:100%;background:#34d399;width:0%}
+.feedback{margin-top:12px;min-height:24px;font-weight:700}
+.home-btn {display:inline-block;background:#3b82f6;color:#fff;padding:8px 14px;border-radius:10px;font-weight:700;text-decoration:none;font-size:16px;box-shadow:0 4px 10px rgba(0,0,0,0.1);transition: transform 0.1s, background 0.2s;}
+.home-btn:hover {background:#2563eb;}
+.home-btn:active {transform:translateY(1px);}
+img.emotion{width:150px;height:150px;object-fit:contain;margin-top:12px;}
+</style>
+</head>
+<body>
+<div style="margin-bottom:12px; display:flex; justify-content:flex-start">
+  <a href="index.html" class="home-btn">🏠 На главную</a>
+</div>
+
+<div class="container">
+  <div class="top">
+    <h1>Тренажёр — Как дела?</h1>
+    <div style="text-align:right">
+      <div class="progress" style="width:220px"><i id="progressBar"></i></div>
+      <div class="small">Прогресс: <strong id="progressText">0 / 0</strong></div>
+    </div>
+  </div>
+
+  <img id="emotionImg" class="emotion" src="" alt="Эмоция"/>
+  <div class="choices" id="choicesContainer"></div>
+  <div id="feedback" class="feedback"></div>
+
+  <div style="margin-top:12px; display:flex;gap:8px;justify-content:flex-end">
+    <button id="playBtn" class="home-btn">▶ Прослушать</button>
+    <button id="restartBtn" class="home-btn">Перезапустить</button>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', ()=>{
+  const PHRASES=[
+    {phrase:"How are you?", img:"images/how_are_you.png"},
+    {phrase:"I'm fine", img:"images/im_fine.png"},
+    {phrase:"I'm happy", img:"images/happy.png"},
+    {phrase:"I'm sad", img:"images/sad.png"}
+  ];
+  const MAX_SUCCESS=1;
+  const STORAGE_KEY='how_are_you_trainer';
+  let phraseState={}, remaining=[], current=null;
+  const progressBar=document.getElementById('progressBar');
+  const progressText=document.getElementById('progressText');
+  const feedback=document.getElementById('feedback');
+  const choicesContainer=document.getElementById('choicesContainer');
+  const emotionImg=document.getElementById('emotionImg');
+
+  function loadState(){
+    try{
+      const raw=localStorage.getItem(STORAGE_KEY);
+      if(raw){ phraseState=JSON.parse(raw); return; }
+    }catch(e){console.warn(e);}
+    PHRASES.forEach(p=>phraseState[p.phrase]={count:0});
+  }
+
+  function saveState(){ localStorage.setItem(STORAGE_KEY,JSON.stringify(phraseState)); }
+
+  function prepareNext(){
+    remaining=PHRASES.filter(p=>phraseState[p.phrase].count<MAX_SUCCESS).slice();
+    shuffleArray(remaining);
+    loadNextPhrase();
+    updateProgress();
+  }
+
+  function loadNextPhrase(){
+    if(remaining.length===0){
+      feedback.textContent='🎉 Все фразы выполнены!';
+      emotionImg.src = 'images/congratulations.jpg'; // показываем поздравление
+      current = null;
+      return;
+    }
+    current = remaining.shift();
+    emotionImg.src = current.img;
+    buildChoices();
+    feedback.textContent = '';
+
+    // Автоматическое воспроизведение фразы
+    speak(current.phrase);
+  }
+
+
+  function buildChoices(){
+    choicesContainer.innerHTML='';
+    const options=PHRASES.map(p=>p.phrase);
+    shuffleArray(options);
+    options.forEach(opt=>{
+      const div=document.createElement('div');
+      div.className='choice';
+      div.textContent=opt;
+      div.addEventListener('click', ()=>{
+        if(opt===current.phrase){
+          div.classList.add('correct');
+          feedback.textContent='✅ Верно!';
+          phraseState[current.phrase].count=Math.min(MAX_SUCCESS, phraseState[current.phrase].count+1);
+          saveState();
+          setTimeout(loadNextPhrase, 900);
+        }else{
+          div.classList.add('wrong');
+          feedback.textContent='❌ Ошибка, попробуйте снова';
+        }
+        updateProgress();
+      });
+      choicesContainer.appendChild(div);
+    });
+  }
+
+  function updateProgress(){
+    const total=PHRASES.length*MAX_SUCCESS;
+    const done=Object.values(phraseState).reduce((s,x)=>s+x.count,0);
+    const pct=total===0?0:Math.round(done/total*100);
+    progressBar.style.width=pct+'%';
+    progressText.textContent=`${done} / ${total}`;
+  }
+
+  function speak(phrase){
+    if('speechSynthesis' in window){
+      const u=new SpeechSynthesisUtterance(phrase);
+      u.lang='en-US'; u.rate=0.95;
+      speechSynthesis.cancel(); speechSynthesis.speak(u);
+    }
+  }
+
+  document.getElementById('playBtn').addEventListener('click', ()=>{
+    if(current) speak(current.phrase);
+  });
+  document.getElementById('restartBtn').addEventListener('click', ()=>{
+    if(confirm('Перезапустить прогресс?')){
+      localStorage.removeItem(STORAGE_KEY);
+      PHRASES.forEach(p=>phraseState[p.phrase]={count:0});
+      prepareNext();
+    }
+  });
+
+  function shuffleArray(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+  loadState();
+  prepareNext();
+});
+</script>
+</body>
+</html>
