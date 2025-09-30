@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Игра на запоминание — Найти пары (картинка ↔ слово)</title>
+<meta name="description" content="Игра: найти пары картинка — слово. Тренируем словарный запас и чтение.">
+<style>
+:root{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;margin:0}
+body{margin:0;padding:18px;background:#f6fbff;color:#07203a}
+.container{max-width:1100px;margin:20px auto;background:#fff;padding:18px;border-radius:12px;box-shadow:0 8px 30px rgba(3,10,18,0.06)}
+.header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-size:20px;margin:0}
+.instructions{color:#475569;font-size:14px;margin-top:6px}
+.controls{display:flex;gap:8px;align-items:center;margin-top:12px}
+.button{background:#3b82f6;color:#fff;padding:8px 12px;border-radius:8px;border:0;cursor:pointer;font-weight:700}
+.button.ghost{background:#6b7280}
+.progress{height:10px;background:#e6eef6;border-radius:999px;overflow:hidden;margin-top:8px;width:220px}
+.progress > i{display:block;height:100%;background:#34d399;width:0%}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-top:16px}
+.card{background:#eef2ff;border-radius:10px;height:120px;display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer;user-select:none;border:1px solid #dbe7ff;box-shadow:0 6px 18px rgba(13,20,30,0.03)}
+.card .front, .card .back{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:8px;border-radius:10px;backface-visibility:hidden;transition:transform .28s ease, opacity .28s}
+.card .front{background:#eef2ff;color:#07203a;transform:rotateY(0deg)}
+.card .back{background:#fff;border:1px dashed #cbd5e1;color:#07203a;transform:rotateY(180deg);flex-direction:column;gap:6px}
+.card.flipped .front{transform:rotateY(-180deg);opacity:0}
+.card.flipped .back{transform:rotateY(0deg);opacity:1}
+.card.matched{background:#dcfce7;border-color:#86efac;cursor:default;box-shadow:0 8px 22px rgba(34,197,94,0.06)}
+.card img{max-width:100%;max-height:100%;object-fit:contain;border-radius:6px}
+.word{font-size:18px;font-weight:800;text-transform:lowercase}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.badge{padding:6px 10px;border-radius:999px;background:#f1f5f9;border:1px solid #e2e8f0;font-weight:700}
+.home-btn {display:inline-block;background:#10b981;color:#fff;padding:8px 14px;border-radius:10px;font-weight:700;text-decoration:none;font-size:16px;box-shadow:0 4px 10px rgba(0,0,0,0.06);transition: transform .1s, background .2s;}
+.home-btn:hover {opacity:0.95; transform: translateY(-1px);}
+.small{font-size:13px;color:#475569}
+.debug{display:none;margin-top:12px;padding:8px;background:#fff7ed;border:1px solid #fde3b7;color:#92400e;border-radius:8px;white-space:pre-wrap}
+@media (max-width:720px){ .card{height:100px} .word{font-size:16px} }
+</style>
+</head>
+<body>
+<div style="margin:12px auto;max-width:1100px;display:flex;gap:12px;align-items:center;justify-content:flex-start">
+  <a href="index.html" class="home-btn">🏠 На главную</a>
+</div>
+
+<div class="container" role="main" aria-label="Игра на запоминание — Найти пары">
+  <div class="header">
+    <div>
+      <h1>Найти пары — картинка и слово</h1>
+      <div class="instructions">Найди пары: картинка ↔ слово. Кликни две карточки — если они соответствуют (одно и то же слово), они останутся открытыми и слово будет произнесено.</div>
+    </div>
+
+    <div style="text-align:right">
+      <div class="row">
+        <div class="badge" id="foundBadge">Найдено: 0 / 0</div>
+        <div class="small">Прогресс:</div>
+        <div class="progress"><i id="progressBar"></i></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls" style="margin-top:12px">
+    <button id="restartBtn" class="button ghost">Перезапустить</button>
+    <button id="shuffleBtn" class="button">Перемешать</button>
+    <label style="margin-left:8px" class="small"><input type="checkbox" id="ttsEnabled" checked> Воспроизводить слово при нажатии</label>
+  </div>
+
+  <div id="grid" class="grid" aria-live="polite" style="margin-top:14px"></div>
+
+  <div id="debug" class="debug"></div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', ()=> {
+  /* ====== Конфигурация слов и картинок (замени/подготовь изображения в папке images/) ======
+     Слова подобраны под 2-й класс: соответствуют темам учебника.
+     Для каждой пары: word (англ, без заглавных) и img — путь к картинке.
+  */
+  const PAIRS = [
+    { word: 'cat', img: 'images/cat.jpg' },
+    { word: 'dog', img: 'images/dog.jpg' },
+    { word: 'ball', img: 'images/ball.jpg' },
+    { word: 'book', img: 'images/book.jpg' },
+    { word: 'apple', img: 'images/apple.jpg' },
+    { word: 'car', img: 'images/car.jpg' }
+  ];
+
+  const STORAGE_KEY = 'memory_pairs_progress_v1';
+  const TTS_KEY = 'memory_pairs_tts_v1';
+
+  /* ====== DOM ====== */
+  const grid = document.getElementById('grid');
+  const foundBadge = document.getElementById('foundBadge');
+  const progressBar = document.getElementById('progressBar');
+  const restartBtn = document.getElementById('restartBtn');
+  const shuffleBtn = document.getElementById('shuffleBtn');
+  const ttsEnabledCheckbox = document.getElementById('ttsEnabled');
+  const debugEl = document.getElementById('debug');
+
+  /* ====== State ====== */
+  let cards = []; // {id, type:'img'|'word', key: word, content: ...}
+  let firstCard = null;
+  let secondCard = null;
+  let lockBoard = false;
+  let matchesFound = 0;
+  let totalPairs = PAIRS.length;
+  let matchedSet = new Set(); // set of words already matched
+  let chosenVoice = null;
+
+  /* ====== Voices helper ====== */
+  function loadVoices(){
+    if(!('speechSynthesis' in window)) return;
+    const vs = speechSynthesis.getVoices();
+    if(vs && vs.length){
+      chosenVoice = vs.find(v => v.lang && v.lang.toLowerCase().startsWith('en')) || vs[0];
+    } else {
+      speechSynthesis.onvoiceschanged = ()=> {
+        const vs2 = speechSynthesis.getVoices();
+        chosenVoice = vs2.find(v => v.lang && v.lang.toLowerCase().startsWith('en')) || vs2[0];
+      };
+    }
+  }
+
+  /* ====== Storage ====== */
+  function loadProgress(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw){
+        const obj = JSON.parse(raw);
+        if(Array.isArray(obj.matched)) matchedSet = new Set(obj.matched);
+      }
+      const tts = localStorage.getItem(TTS_KEY);
+      if(tts !== null) ttsEnabledCheckbox.checked = (tts === 'true');
+    }catch(e){ console.warn('loadProgress err', e); }
+  }
+  function saveProgress(){
+    try{
+      const obj = { matched: Array.from(matchedSet) };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
+      localStorage.setItem(TTS_KEY, String(ttsEnabledCheckbox.checked));
+    }catch(e){ console.warn('saveProgress err', e); }
+  }
+  function resetProgress(){
+    matchedSet = new Set();
+    saveProgress();
+  }
+
+  /* ====== Utilities ====== */
+  function uid(prefix='c'){ return prefix + Math.random().toString(36).slice(2,9); }
+  function shuffleArray(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+  /* ====== Build cards: for each pair create two cards (image and word) ====== */
+  function buildCards(){
+    cards = [];
+    PAIRS.forEach(p => {
+      cards.push({ id: uid('img'), type: 'img', key: p.word, content: p.img });
+      cards.push({ id: uid('word'), type: 'word', key: p.word, content: p.word });
+    });
+    shuffleArray(cards);
+  }
+
+  /* ====== Render grid ====== */
+  function renderGrid(){
+    grid.innerHTML = '';
+    cards.forEach(card => {
+      const div = document.createElement('div');
+      div.className = 'card';
+      div.tabIndex = 0;
+      div.dataset.id = card.id;
+      div.dataset.key = card.key;
+      div.dataset.type = card.type;
+
+      // front (hidden face) — will be removed when flipped
+      const front = document.createElement('div');
+      front.className = 'front';
+      front.innerHTML = '<div class="small">Click</div>';
+
+      // back (shown when flipped) — contains image or word
+      const back = document.createElement('div');
+      back.className = 'back';
+      if(card.type === 'img'){
+        const img = document.createElement('img');
+        img.src = card.content;
+        img.alt = card.key;
+        back.appendChild(img);
+      } else {
+        const span = document.createElement('div');
+        span.className = 'word';
+        span.textContent = card.content;
+        back.appendChild(span);
+      }
+
+      div.appendChild(front);
+      div.appendChild(back);
+
+      // mark matched visually if previously matched
+      if(matchedSet.has(card.key)){
+        div.classList.add('flipped','matched');
+        // ensure both sides show matched state
+      }
+
+      // handlers
+      div.addEventListener('click', ()=> onCardClick(div, card));
+      div.addEventListener('keydown', (e)=> {
+        if(e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onCardClick(div, card); }
+      });
+
+      grid.appendChild(div);
+    });
+    updateUI();
+  }
+
+  /* ====== Click logic ====== */
+  function onCardClick(div, card){
+    if(lockBoard) return;
+    if(div.classList.contains('flipped') || div.classList.contains('matched')) return;
+    flipCard(div);
+
+    if(!firstCard){
+      firstCard = { div, card };
+      // play TTS of word when card flipped (optional) — maybe only when it's an image to give audio cue
+      if(ttsEnabledCheckbox.checked){
+        // when flipping either card, speak the word (soft cue)
+        speakWord(card.key);
+      }
+      return;
+    }
+    secondCard = { div, card };
+    // check pair
+    if(firstCard.card.key === secondCard.card.key && firstCard.card.type !== secondCard.card.type){
+      // match
+      markMatched(firstCard.div, secondCard.div, firstCard.card.key);
+      firstCard = null;
+      secondCard = null;
+      // update progress
+      matchesFound++;
+      matchedSet.add(firstCard ? firstCard.card.key : secondCard ? secondCard.card.key : secondCard.card.key); // safe add below also
+      // Actually add by key:
+      // we added above (but firstCard is null) — better ensure:
+      // We'll add current key directly:
+      // (Handled in markMatched)
+    } else {
+      // not a match -> flip back after delay
+      lockBoard = true;
+      setTimeout(()=> {
+        unflipCard(firstCard.div);
+        unflipCard(secondCard.div);
+        firstCard = null;
+        secondCard = null;
+        lockBoard = false;
+      }, 900);
+    }
+    updateUI();
+    saveProgress();
+  }
+
+  function flipCard(div){
+    div.classList.add('flipped');
+  }
+  function unflipCard(div){
+    div.classList.remove('flipped');
+  }
+  function markMatched(divA, divB, key){
+    divA.classList.add('matched');
+    divB.classList.add('matched');
+    // ensure they remain flipped
+    divA.classList.add('flipped');
+    divB.classList.add('flipped');
+    // record matched key
+    matchedSet.add(key);
+    matchesFound = matchedSet.size;
+    updateUI();
+    saveProgress();
+    // speak matched word if enabled
+    if(ttsEnabledCheckbox.checked) speakWord(key);
+    // if all matched — congrats
+    if(matchedSet.size === totalPairs){
+      setTimeout(()=> {
+        // small celebration: show message via badge
+        foundBadge.textContent = `Найдено: ${matchedSet.size} / ${totalPairs} — Молодец! 🎉`;
+      }, 350);
+    }
+  }
+
+  /* ====== UI update ====== */
+  function updateUI(){
+    foundBadge.textContent = `Найдено: ${matchedSet.size} / ${totalPairs}`;
+    const pct = Math.round((matchedSet.size / totalPairs) * 100);
+    progressBar.style.width = pct + '%';
+    // ensure cards reflect matchedSet: keep matched if recorded
+    Array.from(grid.children).forEach(div => {
+      const key = div.dataset.key;
+      if(matchedSet.has(key)){
+        div.classList.add('matched','flipped');
+      }
+    });
+  }
+
+  /* ====== Shuffle / restart handlers ====== */
+  shuffleBtn.addEventListener('click', ()=> {
+    // rebuild new shuffled layout (keep matched set)
+    buildCards();
+    renderGrid();
+  });
+  restartBtn.addEventListener('click', ()=> {
+    if(!confirm('Сбросить прогресс и перемешать карточки?')) return;
+    resetProgress();
+    matchedSet.clear();
+    matchesFound = 0;
+    buildCards();
+    renderGrid();
+    saveProgress();
+  });
+
+  ttsEnabledCheckbox.addEventListener('change', ()=> saveProgress());
+
+  /* ====== TTS helper ====== */
+  function speakWord(word){
+    if(!('speechSynthesis' in window) || !word) return;
+    const u = new SpeechSynthesisUtterance(word);
+    u.lang = 'en-US';
+    u.rate = 0.95;
+    if(chosenVoice) u.voice = chosenVoice;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  }
+
+  /* ====== Init sequence ====== */
+  loadVoices();
+  loadProgress();
+  buildCards();
+  renderGrid();
+  // set matchedSet count and UI
+  matchesFound = matchedSet.size;
+  updateUI();
+
+  // save before unload
+  window.addEventListener('beforeunload', saveProgress);
+
+  // debug helper (uncomment to show)
+  // debugEl.style.display = 'block'; debugEl.textContent = JSON.stringify({ matched: Array.from(matchedSet) }, null, 2);
+});
+</script>
+</body>
+</html>
