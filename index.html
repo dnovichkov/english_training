@@ -3,40 +3,100 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>English Training</title>
+  <title>English Training — тренажёры для 2 класса</title>
+  <meta name="description" content="Бесплатные интерактивные тренажёры для изучения английского языка для 2 класса. Упражнения на буквы, слова и пропущенные буквы.">
+  <meta name="keywords" content="английский язык, 2 класс, английский в фокусе, упражнения, тренажеры, буквы, слова">
+  <meta name="author" content="Dmitriy Novichkov">
+
+  <!-- Open Graph для соцсетей -->
+  <meta property="og:title" content="English Training — тренажёры для 2 класса">
+  <meta property="og:description" content="Бесплатные интерактивные упражнения для изучения английского алфавита и слов.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://dnovichkov.github.io/english_training/">
+
   <style>
     :root{color-scheme: light dark}
     body{font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;max-width:920px;margin:40px auto;padding:0 18px;color:#111;background:#f7f7fb}
     h1{font-size:1.6rem;margin:0 0 12px}
+    p{margin:4px 0 12px;color:#333}
     .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
     .card{background:#fff;border:1px solid #e6e9ef;padding:12px;border-radius:10px;box-shadow:0 6px 18px rgba(13,20,30,0.04)}
-    .card a{display:block;font-weight:600;color:#0b62c6;text-decoration:none}
+    .card a{display:block;font-weight:600;color:#0b62c6;text-decoration:none;margin-bottom:4px}
   </style>
+
+  <!-- Schema.org разметка -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "EducationalOrganization",
+    "name": "English Training",
+    "url": "https://dnovichkov.github.io/",
+    "hasCourse": [
+      {
+        "@type": "Course",
+        "name": "Буквы a - m: просто",
+        "description": "Простые упражнения для изучения букв английского алфавита от a до m.",
+        "url": "https://dnovichkov.github.io/english_training/letters_a-m_v1.html"
+      },
+      {
+        "@type": "Course",
+        "name": "Буквы a - m: сложнее",
+        "description": "Более сложные упражнения для закрепления букв a-m.",
+        "url": "https://dnovichkov.github.io/english_training/letters_a-m_v2.html"
+      },
+      {
+        "@type": "Course",
+        "name": "Буквы n - z: просто",
+        "description": "Простые упражнения для изучения букв n-z.",
+        "url": "https://dnovichkov.github.io/english_training/letters_n-z_v1.html"
+      },
+      {
+        "@type": "Course",
+        "name": "Буквы n - z: сложнее",
+        "description": "Более сложные упражнения для закрепления букв n-z.",
+        "url": "https://dnovichkov.github.io/english_training/letters_n-z_v2.html"
+      },
+      {
+        "@type": "Course",
+        "name": "Вставь пропущенные буквы r-z",
+        "description": "Упражнения на заполнение пропущенных букв r-z в словах.",
+        "url": "https://dnovichkov.github.io/english_training/image-fill-in-the-blanks_r-z.html"
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
-  <h1>Тренажёры — English Training</h1>
+  <main>
+    <h1>Тренажёры — English Training</h1>
+    <p>На этой странице вы найдете интерактивные упражнения для изучения английского языка во 2 классе. Нажмите на нужную карточку, чтобы начать изучать буквы и слова.</p>
 
-  <div class="grid">
-    <div class="card">
-      <a href="letters_a-m_v1.html">Буквы a - m: просто</a>
-    </div>
+    <section class="grid">
+      <article class="card">
+        <a href="letters_a-m_v1.html">Буквы a - m: просто</a>
+        <p>Простые упражнения для изучения букв английского алфавита от a до m.</p>
+      </article>
 
-    <div class="card">
-      <a href="letters_a-m_v2.html">Буквы a - m: сложнее</a>
-    </div>
+      <article class="card">
+        <a href="letters_a-m_v2.html">Буквы a - m: сложнее</a>
+        <p>Более сложные упражнения для закрепления букв a-m.</p>
+      </article>
 
-    <div class="card">
-      <a href="letters_n-z_v1.html">Буквы n - z: просто</a>
-    </div>
+      <article class="card">
+        <a href="letters_n-z_v1.html">Буквы n - z: просто</a>
+        <p>Простые упражнения для изучения букв n-z.</p>
+      </article>
 
-    <div class="card">
-      <a href="letters_n-z_v2.html">Буквы n - z: сложнее</a>
-    </div>
+      <article class="card">
+        <a href="letters_n-z_v2.html">Буквы n - z: сложнее</a>
+        <p>Более сложные упражнения для закрепления букв n-z.</p>
+      </article>
 
-    <div class="card">
-      <a href="image-fill-in-the-blanks_r-z.html">Вставь пропущенные буквы r-z</a>
-    </div>
-  </div>
-
+      <article class="card">
+        <a href="image-fill-in-the-blanks_r-z.html">Вставь пропущенные буквы r-z</a>
+        <p>Упражнения на заполнение пропущенных букв r-z в словах.</p>
+      </article>
+    </section>
+  </main>
 </body>
 </html>
