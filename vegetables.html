@@ -85,11 +85,16 @@ document.addEventListener('DOMContentLoaded', ()=>{
   function saveState(){ localStorage.setItem(STORAGE_KEY,JSON.stringify(vegetableState)); }
 
   function prepareNext(){
-    remaining=VEGETABLES.filter(v=>vegetableState[v.word].count<MAX_SUCCESS).slice();
+    remaining = VEGETABLES.filter(v => vegetableState[v.word].count < MAX_SUCCESS).slice();
     shuffleArray(remaining);
     buildTiles();
     buildWords();
     updateProgress();
+
+    // Автопрослушивание первого слова
+    if (remaining.length) {
+        setTimeout(() => speak(remaining[0].word), 180);
+    }
   }
 
   function buildTiles(){
@@ -112,6 +117,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
           vegetableState[v.word].count=Math.min(MAX_SUCCESS,vegetableState[v.word].count+1);
           saveState();
           prepareNext();
+          // Автопрослушивание следующего слова
+          if(remaining.length){
+            setTimeout(() => speak(remaining[0].word), 180);
+          }
         }else{
           feedback.textContent='❌ Ошибка, попробуй ещё раз';
           feedback.style.color='red';
