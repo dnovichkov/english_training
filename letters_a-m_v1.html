@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Тренажёр правописания — без подсматривания</title>
+<style>
+  :root{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;}
+  body{margin:0;padding:18px;background:#f5f7fb;color:#0f172a}
+  .container{max-width:880px;margin:0 auto;background:#fff;padding:18px;border-radius:10px;box-shadow:0 6px 20px rgba(15,23,42,0.06)}
+  h1{font-size:20px;margin:0 0 8px}
+  p.lead{margin:4px 0 16px;color:#334155}
+  .topbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+  button{background:#0ea5a4;border:0;color:white;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:600}
+  button.secondary{background:#64748b}
+  .word-area{display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+  .slots{display:flex;gap:8px}
+  .slot{width:48px;height:56px;border:2px dashed #cbd5e1;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px;background:#f8fafc;user-select:none}
+  .slot.filled{border-style:solid;background:#fff}
+  .tiles{display:flex;gap:8px;flex-wrap:wrap;min-height:60px;padding:8px;border-radius:8px;background:#eef2ff}
+  .tile{padding:8px 12px;border-radius:8px;background:white;border:1px solid #cbd5e1;cursor:grab;font-weight:700;user-select:none}
+  .tile:active{cursor:grabbing}
+  .status{margin-top:12px}
+  .correct{background:#dcfce7;border-color:#86efac}
+  .wrong{background:#fee2e2;border-color:#fca5a5}
+  .progress{height:10px;background:#e2e8f0;border-radius:999px;overflow:hidden;margin-top:8px}
+  .progress > i{display:block;height:100%;background:#34d399;width:0%}
+  .small{font-size:13px;color:#475569}
+  .word-card{padding:12px;border-radius:10px;background:#f8fafc;border:1px solid #e2e8f0}
+  .counts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .badge{padding:6px 8px;border-radius:999px;background:#e6eef8;color:#0f172a;font-weight:600;border:1px solid #dbeafe}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Тренажёр правописания — слушай и собирай</h1>
+  <p class="lead">Текст слова не отображается. Слушай слово ► и собирай буквы по слуху. Прогресс виден, но полного списка слов — нет.</p>
+
+  <div class="topbar">
+    <div class="word-card" id="wordCard">
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button id="playBtn">▶ Прослушать</button>
+        <div class="small" id="currentWordLabel">Слово: <b id="currentWordIndex">№1</b></div>
+      </div>
+      <div class="small" style="margin-top:8px">Осталось слов: <span id="leftCount">—</span></div>
+    </div>
+
+    <div style="margin-left:auto;text-align:right">
+      <div class="small">Прогресс: <span id="progressText">0 / 0</span></div>
+      <div class="progress"><i id="progressBar"></i></div>
+    </div>
+  </div>
+
+  <div class="word-area">
+    <div>
+      <div class="slots" id="slotsContainer" aria-label="Слоты для букв"></div>
+      <div style="margin-top:10px">
+        <button id="checkBtn">Проверить</button>
+        <button id="clearBtn" class="secondary">Очистить</button>
+      </div>
+    </div>
+
+    <div style="flex:1">
+      <div class="small">Буквы (перетащи или кликни):</div>
+      <div class="tiles" id="tilesContainer" aria-label="Буквенные плитки"></div>
+    </div>
+  </div>
+
+  <div class="status small" id="feedback"></div>
+
+  <div style="margin-top:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <div class="counts" id="countsArea">
+      <!-- Показываем только агрегированный прогресс: сколько слов осталось и сколько раз каждое слово нужно повторить всего (без перечисления) -->
+      <div class="badge" id="remainingBadge">Осталось: —</div>
+      <div class="badge" id="roundsBadge">Нужно повторений: 2</div>
+    </div>
+    <div style="margin-left:auto;"><button id="restartBtn" class="secondary">Перезапустить</button></div>
+  </div>
+</div>
+
+<script>
+/* ====== Настройки и слова ====== */
+const WORDS = ["ant","bed","cat","dog","egg","flag","glass","horse","ink","jug","kangaroo","lamp","mouse"];
+const TTS_LANG = 'en-US';
+const MAX_SUCCESS = 2;
+const STORAGE_KEY = 'spelling_trainer_v1_a_m';
+
+/* ====== Состояние игры ====== */
+let wordState = {};        // word -> {count}
+let remainingSequence = []; // текущая последовательность слов раунда (только слова с count < MAX_SUCCESS)
+let currentWord = null;
+let currentWordNumber = 0; // нумерация слов (для отображения "Слово: №N")
+
+/* ====== DOM ====== */
+const tilesContainer = document.getElementById('tilesContainer');
+const slotsContainer = document.getElementById('slotsContainer');
+const playBtn = document.getElementById('playBtn');
+const checkBtn = document.getElementById('checkBtn');
+const clearBtn = document.getElementById('clearBtn');
+const feedback = document.getElementById('feedback');
+const progressBar = document.getElementById('progressBar');
+const progressText = document.getElementById('progressText');
+const currentWordIndexLabel = document.getElementById('currentWordIndex');
+const leftCountLabel = document.getElementById('leftCount');
+const remainingBadge = document.getElementById('remainingBadge');
+const roundsBadge = document.getElementById('roundsBadge');
+const restartBtn = document.getElementById('restartBtn');
+
+/* ====== Инициализация или восстановление прогресса ====== */
+function loadFromStorage(){
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return false;
+    const obj = JSON.parse(raw);
+    if(obj && obj.wordState) {
+      wordState = obj.wordState;
+      return true;
+    }
+  } catch(e){ console.warn('storage load error', e); }
+  return false;
+}
+function saveToStorage(){
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({wordState})); } catch(e){ /* ignore */ }
+}
+
+function initGame(){
+  const had = loadFromStorage();
+  if(!had){
+    WORDS.forEach(w=>wordState[w]={count:0});
+  } else {
+    // Ensure any missing words are initialised (in case WORDS changed)
+    WORDS.forEach(w=>{ if(!wordState[w]) wordState[w]={count:0}; });
+  }
+  prepareNextSequence();
+  currentWordNumber = 0;
+  loadCurrentWord();
+  updateProgress();
+  feedback.textContent = 'Нажмите ▶ чтобы прослушать слово. Текущий текст слова скрыт.';
+}
+
+function prepareNextSequence(){
+  const pending = WORDS.filter(w=>wordState[w].count < MAX_SUCCESS);
+  remainingSequence = shuffleArray(pending.slice());
+}
+
+function loadCurrentWord(){
+  // если остатков нет — попробуем новый раунд или завершение
+  if(!remainingSequence || remainingSequence.length === 0){
+    prepareNextSequence();
+  }
+  if(remainingSequence.length === 0){
+    finishGame();
+    return;
+  }
+  currentWord = remainingSequence.shift();
+  currentWordNumber++;
+  // показываем только номер слова, а не сам текст
+  currentWordIndexLabel.textContent = currentWordNumber;
+  setupSlots(currentWord);
+  setupTiles(currentWord);
+  // Авто воспроизвести слово
+  setTimeout(()=> speakWord(currentWord), 150);
+  updateProgress();
+}
+
+function setupSlots(word){
+  slotsContainer.innerHTML = '';
+  for(let i=0;i<word.length;i++){
+    const slot = document.createElement('div');
+    slot.className = 'slot';
+    slot.dataset.pos = i;
+    slot.dataset.expected = word[i];
+    slot.ondragover = ev=>ev.preventDefault();
+    slot.ondrop = handleDropOnSlot;
+    slot.addEventListener('click', ()=>{ // вернуть плитку в контейнер
+      if(slot.firstChild){
+        tilesContainer.appendChild(slot.firstChild);
+        slot.classList.remove('filled','correct','wrong');
+      }
+    });
+    slotsContainer.appendChild(slot);
+  }
+}
+
+function setupTiles(word){
+  tilesContainer.innerHTML = '';
+  const letters = word.split('');
+  const tiles = letters.map((ch,idx)=>({ch, id: `${ch}_${idx}_${Date.now()+Math.random().toString(36).slice(2,6)}`}));
+  shuffleArray(tiles);
+  tiles.forEach(t=>{
+    const el = document.createElement('div');
+    el.className = 'tile';
+    el.textContent = t.ch;
+    el.draggable = true;
+    el.id = t.id;
+    el.addEventListener('dragstart', ev=>{ ev.dataTransfer.setData('text/plain', t.id); });
+    el.addEventListener('click', ()=>{ // click: place into first empty slot
+      const firstEmpty = Array.from(slotsContainer.children).find(s=>!s.firstChild);
+      if(firstEmpty){
+        firstEmpty.appendChild(el);
+        firstEmpty.classList.add('filled');
+      }
+    });
+    tilesContainer.appendChild(el);
+  });
+  tilesContainer.ondragover = ev=>ev.preventDefault();
+  tilesContainer.ondrop = ev=>{
+    ev.preventDefault();
+    const id = ev.dataTransfer.getData('text/plain');
+    const tile = document.getElementById(id);
+    if(tile) tilesContainer.appendChild(tile);
+  };
+}
+
+function handleDropOnSlot(ev){
+  ev.preventDefault();
+  const slot = ev.currentTarget;
+  const tileId = ev.dataTransfer.getData('text/plain');
+  const tile = document.getElementById(tileId);
+  if(!tile) return;
+  if(slot.firstChild && slot.firstChild !== tile){
+    tilesContainer.appendChild(slot.firstChild);
+  }
+  slot.appendChild(tile);
+  slot.classList.add('filled');
+}
+
+function checkAnswer(){
+  const slots = Array.from(slotsContainer.children);
+  const formed = slots.map(s=> s.firstChild ? s.firstChild.textContent : '');
+  if(formed.includes('')) {
+    feedback.innerHTML = '<span style="color:#b45309">Заполните все слоты перед проверкой.</span>';
+    slots.filter(s=>!s.firstChild).forEach(s=>{
+      s.classList.add('wrong');
+      setTimeout(()=>s.classList.remove('wrong'),700);
+    });
+    return;
+  }
+  const word = currentWord;
+  let allOk = true;
+  slots.forEach((s,i)=>{
+    const ch = formed[i];
+    if(ch === word[i]){
+      s.classList.remove('wrong'); s.classList.add('correct');
+    } else {
+      s.classList.remove('correct'); s.classList.add('wrong');
+      allOk = false;
+    }
+  });
+
+  if(allOk){
+    feedback.innerHTML = '<span style="color:green;font-weight:600">Верно! 🎉</span>';
+    wordState[currentWord].count = Math.min(MAX_SUCCESS, wordState[currentWord].count + 1);
+    saveToStorage();
+    updateProgress();
+    setTimeout(()=> {
+      Array.from(slotsContainer.children).forEach(s=>{ s.classList.remove('correct'); s.classList.remove('wrong'); });
+      loadCurrentWord();
+    }, 900);
+  } else {
+    feedback.innerHTML = '<span style="color:#b91c1c">Есть ошибки — попробуй ещё раз.</span>';
+    updateProgress();
+  }
+}
+
+function updateProgress(){
+  const totalNeeded = WORDS.length * MAX_SUCCESS;
+  const done = Object.values(wordState).reduce((s,x)=>s + x.count, 0);
+  const pct = Math.round((done / totalNeeded) * 100);
+  progressBar.style.width = pct + '%';
+  progressText.textContent = `${done} / ${totalNeeded}`;
+  const remainingWords = WORDS.filter(w=>wordState[w].count < MAX_SUCCESS).length;
+  leftCountLabel.textContent = remainingWords;
+  remainingBadge.textContent = `Осталось слов: ${remainingWords}`;
+  roundsBadge.textContent = `Повторов нужно: ${MAX_SUCCESS}`;
+}
+
+function finishGame(){
+  feedback.innerHTML = '<b>Поздравляем! Все слова введены правильно дважды 🎉</b>';
+  currentWordIndexLabel.textContent = '—';
+  // Очистим прогресс в хранилище (можно сохранить, если хотите продолжить)
+  // localStorage.removeItem(STORAGE_KEY);
+}
+
+/* ====== TTS ====== */
+function speakWord(word){
+  if(!('speechSynthesis' in window)){
+    feedback.innerHTML = '<span style="color:#b45309">TTS не поддерживается в этом браузере.</span>';
+    return;
+  }
+  const utter = new SpeechSynthesisUtterance(word);
+  utter.lang = TTS_LANG;
+  utter.rate = 0.95;
+  const voices = window.speechSynthesis.getVoices();
+  if(voices && voices.length){
+    const v = voices.find(v=>v.lang && v.lang.startsWith('en')) || voices[0];
+    if(v) utter.voice = v;
+  }
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(utter);
+}
+
+/* ====== Утилиты ====== */
+function shuffleArray(arr){
+  for(let i=arr.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]] = [arr[j],arr[i]];
+  }
+  return arr;
+}
+
+/* ====== События ====== */
+playBtn.addEventListener('click', ()=> { if(currentWord) speakWord(currentWord); });
+checkBtn.addEventListener('click', checkAnswer);
+clearBtn.addEventListener('click', ()=>{
+  Array.from(slotsContainer.children).forEach(s=>{
+    if(s.firstChild) tilesContainer.appendChild(s.firstChild);
+    s.classList.remove('filled','wrong','correct');
+  });
+  feedback.textContent = '';
+});
+restartBtn.addEventListener('click', ()=>{ 
+  if(confirm('Перезапустить прогресс и очистить сохранение?')) {
+    localStorage.removeItem(STORAGE_KEY);
+    initGame();
+  }
+});
+
+/* ====== Запуск ====== */
+initGame();
+</script>
+</body>
+</html>

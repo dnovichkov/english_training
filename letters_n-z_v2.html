@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Тренажёр — алфавит + TTS + прогресс</title>
+<style>
+  :root{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;margin:0}
+  body{margin:0;padding:18px;background:#f6fbff;color:#07203a}
+  .container{max-width:980px;margin:0 auto;background:#fff;padding:18px;border-radius:12px;box-shadow:0 8px 30px rgba(3,10,18,0.06)}
+  h1{font-size:20px;margin:0 0 6px}
+  .top{display:flex;gap:12px;align-items:center;justify-content:space-between}
+  .tiles{display:flex;gap:8px;flex-wrap:wrap;padding:12px;border-radius:10px;background:#eef2ff}
+  .alpha-btn{
+    min-width:40px;height:40px;padding:6px 8px;border-radius:8px;background:#fff;border:1px solid #cbd5e1;
+    cursor:pointer;font-weight:700;user-select:none;color:#07203a;font-size:16px;
+    display:inline-flex;align-items:center;justify-content:center;line-height:1;box-sizing:border-box;
+  }
+  .alpha-btn:active{transform:translateY(1px)}
+  .slots{display:flex;gap:8px;flex-wrap:nowrap;margin-bottom:8px}
+  .slot{width:50px;height:60px;border:2px dashed #cbd5e1;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;background:#f8fafc;user-select:none}
+  .slot.filled{border-style:solid;background:#fff}
+  .controls{display:flex;gap:8px;align-items:center;margin-top:8px}
+  .small{font-size:13px;color:#475569}
+  .status{margin-top:12px;min-height:24px}
+  .correct{background:#dcfce7;border-color:#86efac}
+  .wrong{background:#fee2e2;border-color:#fca5a5}
+  .progress{height:10px;background:#e6eef6;border-radius:999px;overflow:hidden;margin-top:8px}
+  .progress > i{display:block;height:100%;background:#34d399;width:0%}
+  .badges{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .badge{padding:6px 10px;border-radius:999px;background:#f1f9f8;color:#064e47;font-weight:700;border:1px solid #d6fbef}
+  .debug{margin-top:10px;padding:8px;border-radius:8px;background:#fff7ed;border:1px solid #fde3b7;color:#92400e;font-size:13px;white-space:pre-wrap}
+  button.cta{background:#10b981;color:#fff;border:0;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:700}
+  button.ghost{background:#6b7280;color:#fff;border:0;padding:8px 12px;border-radius:8px;cursor:pointer}
+  @media (max-width:720px){ .slots{overflow-x:auto;padding-bottom:6px} .alpha-btn{min-width:34px;padding:6px} }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="top">
+    <h1>Тренажёр — алфавит + TTS + прогресс</h1>
+    <div style="text-align:right">
+      <div class="small">Прогресс: <strong id="progressText">0 / 0</strong></div>
+      <div class="progress" style="width:220px"><i id="progressBar"></i></div>
+    </div>
+  </div>
+
+  <p class="small">Слушай слово и набирай его буквами из алфавита (или с клавиатуры). Backspace — удалить, Enter — проверить. Текст слова скрыт.</p>
+
+  <div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap">
+    <div style="flex:1;min-width:320px">
+      <div style="display:flex;gap:10px;align-items:center">
+        <div class="small">Слоты (клик — удалить букву):</div>
+        <div style="margin-left:auto" class="small">Слово: <b id="wordIndex">—</b></div>
+      </div>
+      <div class="slots" id="slotsContainer"></div>
+
+      <div class="controls">
+        <button id="playBtn" class="cta">▶ Прослушать</button>
+        <button id="checkBtn" class="cta">Проверить</button>
+        <button id="clearBtn" class="ghost">Очистить</button>
+      </div>
+
+      <div id="feedback" class="status"></div>
+    </div>
+
+    <div style="flex:1;min-width:320px">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div class="small">Английский алфавит (клик — вставить в первый пустой слот):</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div class="small" id="alphabetInfo">Алфавит: —</div>
+        </div>
+      </div>
+      <div class="tiles" id="alphabetContainer" aria-label="Алфавит"></div>
+
+      <div class="badges" style="margin-top:12px">
+        <div class="badge" id="remainingBadge">Осталось слов: —</div>
+        <div class="badge" id="repeatsBadge">Осталось повторов: —</div>
+        <div class="badge">Повторов нужно: <span id="perWordRepeats">2</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+    <button id="restartBtn" class="ghost">Перезапустить (сбросить прогресс)</button>
+  </div>
+
+  <div id="debug" class="debug" style="display:none"></div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', ()=> {
+  try {
+    /* ====== Конфигурация ====== */
+    const WORDS = ["nest","orange","pin","queen","rabbit","snake","tree","umbrella","vest","window","box","yacht","zip"];
+    const TTS_LANG = 'en-US';
+    const MAX_SUCCESS = 2;
+    const ALPHABET = 'abcdefghijklmnopqrstuvwxyz'.split('');
+    const STORAGE_KEY = 'spelling_trainer_v2_n_z';
+
+    /* ====== DOM ====== */
+    const alphabetContainer = document.getElementById('alphabetContainer');
+    const slotsContainer = document.getElementById('slotsContainer');
+    const playBtn = document.getElementById('playBtn');
+    const checkBtn = document.getElementById('checkBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const feedback = document.getElementById('feedback');
+    const alphabetInfo = document.getElementById('alphabetInfo');
+    const remainingBadge = document.getElementById('remainingBadge');
+    const repeatsBadge = document.getElementById('repeatsBadge');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    const wordIndexEl = document.getElementById('wordIndex');
+    const restartBtn = document.getElementById('restartBtn');
+    const perWordRepeats = document.getElementById('perWordRepeats');
+    const debug = document.getElementById('debug');
+
+    perWordRepeats.textContent = MAX_SUCCESS;
+
+    /* ====== Состояние ====== */
+    let wordState = {}; // {word: {count}}
+    let remainingSeq = []; // pending words in current round (count < MAX_SUCCESS)
+    let currentWord = null;
+    let wordCounter = 0; // numeric index for UI display
+    let chosenVoice = null;
+
+    function logDebug(msg){
+      console.log(msg);
+      // debug.style.display = 'block';
+      // debug.textContent += msg + '\n';
+    }
+
+    /* ====== Voices helper ====== */
+    function loadVoicesOnce(){
+      if(!('speechSynthesis' in window)){
+        logDebug('TTS not supported in this browser.');
+        return;
+      }
+      const vs = speechSynthesis.getVoices();
+      if(vs && vs.length){
+        chosenVoice = vs.find(v=> v.lang && v.lang.toLowerCase().startsWith('en')) || vs[0];
+        logDebug('Voice chosen: ' + (chosenVoice ? chosenVoice.name + ' ('+chosenVoice.lang+')' : 'none'));
+      } else {
+        speechSynthesis.onvoiceschanged = () => {
+          const vs2 = speechSynthesis.getVoices();
+          chosenVoice = vs2.find(v=> v.lang && v.lang.toLowerCase().startsWith('en')) || vs2[0];
+          logDebug('Voices available (onvoiceschanged). Voice chosen: ' + (chosenVoice ? chosenVoice.name + ' ('+chosenVoice.lang+')' : 'none'));
+        };
+        logDebug('Voices empty initially — waiting for onvoiceschanged');
+      }
+    }
+
+    /* ====== Storage ====== */
+    function loadState(){
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if(!raw) return false;
+        const obj = JSON.parse(raw);
+        if(obj && obj.wordState){
+          wordState = obj.wordState;
+          return true;
+        }
+      } catch(e){ console.warn('storage load error', e); }
+      return false;
+    }
+    function saveState(){
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({wordState})); }
+      catch(e){ console.warn('storage save error', e); }
+    }
+
+    /* ====== Alphabet UI ====== */
+    function buildAlphabet(){
+      alphabetContainer.innerHTML = '';
+      ALPHABET.forEach(ch=>{
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'alpha-btn';
+        btn.innerText = ch;
+        btn.style.color = '#07203a';
+        btn.addEventListener('click', ()=> insertLetter(ch));
+        alphabetContainer.appendChild(btn);
+      });
+      alphabetInfo.textContent = `Алфавит: ${alphabetContainer.children.length} кнопок`;
+      logDebug(`Alphabet created: ${alphabetContainer.children.length} buttons`);
+    }
+
+    /* ====== Game logic with persistence ====== */
+    function initState(){
+      const had = loadState();
+      if(!had){
+        WORDS.forEach(w=> wordState[w] = {count: 0});
+      } else {
+        // ensure all words present (in case WORDS changed)
+        WORDS.forEach(w=> { if(!wordState[w]) wordState[w] = {count:0}; });
+      }
+      prepareNextSeq();
+    }
+
+    function prepareNextSeq(){
+      const pending = WORDS.filter(w => wordState[w].count < MAX_SUCCESS);
+      remainingSeq = shuffleArray(pending.slice());
+      logDebug('Prepared next sequence; pending count=' + remainingSeq.length);
+    }
+
+    function loadNextWord(){
+      if(!remainingSeq || remainingSeq.length === 0) prepareNextSeq();
+      if(remainingSeq.length === 0){
+        finishGame();
+        return;
+      }
+      currentWord = remainingSeq.shift();
+      wordCounter++;
+      wordIndexEl.textContent = wordCounter;
+      setupSlots(currentWord);
+      // auto-play a bit after load
+      setTimeout(()=> speak(currentWord), 180);
+      updateProgress();
+      logDebug('Loaded word: ' + currentWord + ' (count: ' + wordState[currentWord].count + ')');
+    }
+
+    function setupSlots(word){
+      slotsContainer.innerHTML = '';
+      for(let i=0;i<word.length;i++){
+        const s = document.createElement('div');
+        s.className = 'slot';
+        s.dataset.pos = i;
+        s.dataset.expected = word[i];
+        s.addEventListener('click', ()=> {
+          if(s.textContent.trim()){
+            s.textContent = '';
+            s.classList.remove('filled','correct','wrong');
+          }
+        });
+        slotsContainer.appendChild(s);
+      }
+    }
+
+    function firstEmptySlot(){
+      return Array.from(slotsContainer.children).find(s => !s.textContent.trim());
+    }
+    function lastFilledSlot(){
+      const arr = Array.from(slotsContainer.children);
+      for(let i=arr.length-1;i>=0;i--) if(arr[i].textContent.trim()) return arr[i];
+      return null;
+    }
+
+    function insertLetter(ch){
+      const slot = firstEmptySlot();
+      if(!slot){
+        feedback.innerHTML = '<span style="color:#b45309">Все слоты заполнены — нажмите «Проверить» или удалите букву.</span>';
+        flashEmptyIndicator();
+        return;
+      }
+      slot.textContent = ch;
+      slot.classList.add('filled');
+      feedback.textContent = '';
+    }
+
+    function checkAnswer(){
+      const slots = Array.from(slotsContainer.children);
+      const formed = slots.map(s => s.textContent.trim() || '');
+      if(formed.includes('')){
+        feedback.innerHTML = '<span style="color:#b45309">Заполните все слоты перед проверкой.</span>';
+        slots.filter(s=>!s.textContent.trim()).forEach(s=> highlightElem(s,'wrong',700));
+        return;
+      }
+      const expected = currentWord;
+      let ok = true;
+      slots.forEach((s,i)=>{
+        const ch = formed[i];
+        if(ch === expected[i]){
+          s.classList.remove('wrong'); s.classList.add('correct');
+        } else {
+          s.classList.remove('correct'); s.classList.add('wrong');
+          ok = false;
+        }
+      });
+
+      if(ok){
+        feedback.innerHTML = '<span style="color:green;font-weight:700">Верно! 🎉</span>';
+        // increment persisted counter
+        wordState[currentWord].count = Math.min(MAX_SUCCESS, wordState[currentWord].count + 1);
+        saveState();
+        updateProgress();
+        setTimeout(()=> {
+          Array.from(slotsContainer.children).forEach(s=> s.classList.remove('correct','wrong'));
+          loadNextWord();
+        }, 900);
+      } else {
+        feedback.innerHTML = '<span style="color:#b91c1c">Есть ошибки — попробуй ещё раз.</span>';
+        updateProgress();
+      }
+    }
+
+    function updateProgress(){
+      const total = WORDS.length * MAX_SUCCESS;
+      const done = Object.values(wordState).reduce((s,x)=> s + x.count, 0);
+      const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+      progressBar.style.width = pct + '%';
+      progressText.textContent = `${done} / ${total}`;
+
+      const remainingWords = WORDS.filter(w=> wordState[w].count < MAX_SUCCESS).length;
+      remainingBadge.textContent = `Осталось слов: ${remainingWords}`;
+
+      const remainingRepeats = WORDS.reduce((acc,w)=> acc + Math.max(0, MAX_SUCCESS - (wordState[w].count || 0)), 0);
+      repeatsBadge.textContent = `Осталось повторов: ${remainingRepeats}`;
+    }
+
+    function finishGame(){
+      feedback.innerHTML = '<b>Поздравляем! Все слова введены правильно дважды 🎉</b>';
+      wordIndexEl.textContent = '—';
+      updateProgress();
+    }
+
+    function restartAll(){
+      if(!confirm('Перезапустить прогресс и очистить сохранение?')) return;
+      localStorage.removeItem(STORAGE_KEY);
+      WORDS.forEach(w=> wordState[w] = {count:0});
+      prepareNextSeq();
+      wordCounter = 0;
+      loadNextWord();
+      updateProgress();
+      feedback.textContent = 'Старт.';
+      logDebug('Progress reset by user.');
+    }
+
+    /* ====== Keyboard & UI helpers ====== */
+    document.addEventListener('keydown', (ev)=>{
+      const k = ev.key;
+      if(k.length === 1 && /^[a-zA-Z]$/.test(k)){
+        insertLetter(k.toLowerCase());
+        ev.preventDefault();
+        return;
+      }
+      if(k === 'Backspace'){
+        const last = lastFilledSlot();
+        if(last){
+          last.textContent = '';
+          last.classList.remove('filled','correct','wrong');
+        }
+        ev.preventDefault();
+        return;
+      }
+      if(k === 'Enter'){
+        const hasAny = Array.from(slotsContainer.children).some(s=> s.textContent.trim());
+        if(hasAny) checkAnswer(); else if(currentWord) speak(currentWord);
+        ev.preventDefault();
+        return;
+      }
+    });
+
+    function flashEmptyIndicator(){
+      const first = firstEmptySlot();
+      if(first) highlightElem(first,'wrong',600);
+    }
+    function highlightElem(el, cls, ms=700){
+      el.classList.add(cls);
+      setTimeout(()=> el.classList.remove(cls), ms);
+    }
+
+    /* ====== TTS ====== */
+    function speak(word){
+      if(!('speechSynthesis' in window)){
+        feedback.innerHTML = '<span style="color:#b45309">TTS не поддерживается в этом браузере.</span>';
+        return;
+      }
+      const u = new SpeechSynthesisUtterance(word);
+      u.lang = TTS_LANG;
+      u.rate = 0.95;
+      if(chosenVoice) u.voice = chosenVoice;
+      speechSynthesis.cancel();
+      speechSynthesis.speak(u);
+      logDebug('Speak: ' + word + (chosenVoice ? (' (voice: '+chosenVoice.name+')') : ' (no voice chosen)'));
+    }
+
+    /* ====== Buttons ====== */
+    playBtn.addEventListener('click', ()=> { if(currentWord) speak(currentWord); });
+    checkBtn.addEventListener('click', checkAnswer);
+    clearBtn.addEventListener('click', ()=> {
+      Array.from(slotsContainer.children).forEach(s=> { s.textContent=''; s.classList.remove('filled','correct','wrong'); });
+      feedback.textContent = '';
+    });
+    restartBtn.addEventListener('click', restartAll);
+
+    /* ====== Utilities ====== */
+    function shuffleArray(a){
+      for(let i=a.length-1;i>0;i--){
+        const j = Math.floor(Math.random()*(i+1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    /* ====== Init ====== */
+    buildAlphabet();
+    loadVoicesOnce();
+
+    // init state and load first word
+    (function init(){
+      const had = loadState();
+      if(!had){
+        WORDS.forEach(w=> wordState[w] = {count:0});
+      } else {
+        WORDS.forEach(w=> { if(!wordState[w]) wordState[w] = {count:0}; });
+      }
+      prepareNextSeq();
+      wordCounter = 0;
+      loadNextWord();
+      updateProgress();
+      // ensure state saved before unload (extra safety)
+      window.addEventListener('beforeunload', saveState);
+      logDebug('Init complete. LocalStorage key: ' + STORAGE_KEY);
+    })();
+
+  } catch (err){
+    console.error('Init error:', err);
+    const debug = document.getElementById('debug');
+    debug.style.display = 'block';
+    debug.textContent = 'Init error: ' + (err && err.message ? err.message : String(err));
+  }
+});
+</script>
+</body>
+</html>
