@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Чтение + вопросы — Прочитай и ответь</title>
+<meta name="description" content="Короткие тексты (2–3 предложения) и вопрос по тексту. Упражнение для 2 класса.">
+<style>
+:root{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;margin:0}
+body{margin:0;padding:18px;background:#f6fbff;color:#07203a}
+.container{max-width:980px;margin:16px auto;background:#fff;padding:18px;border-radius:12px;box-shadow:0 8px 30px rgba(3,10,18,0.06)}
+h1{font-size:20px;margin:0 0 8px}
+.top{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.instructions{color:#475569;font-size:14px;margin-top:6px}
+.card{background:#eef2ff;padding:12px;border-radius:10px;margin-top:12px}
+.passage{font-size:18px;line-height:1.45}
+.question{margin-top:12px;font-weight:700}
+.choices{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.choice{padding:10px 12px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;font-weight:700;user-select:none}
+.choice:hover{box-shadow:0 4px 10px rgba(11,65,152,0.06)}
+.choice.selected{outline:3px solid rgba(59,130,246,0.12)}
+.choice.correct{background:#dcfce7;border-color:#86efac}
+.choice.wrong{background:#fee2e2;border-color:#fca5a5}
+.controls{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
+.button{background:#3b82f6;color:#fff;padding:8px 12px;border-radius:8px;border:0;cursor:pointer;font-weight:700}
+.button.ghost{background:#6b7280}
+.badges{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.badge{padding:6px 10px;border-radius:999px;background:#f1f5f9;border:1px solid #e2e8f0;font-weight:700}
+.feedback{margin-top:12px;min-height:28px;font-weight:700;text-align:center}
+.home-btn {display:inline-block;background:#10b981;color:#fff;padding:8px 14px;border-radius:10px;font-weight:700;text-decoration:none;font-size:16px;box-shadow:0 4px 10px rgba(0,0,0,0.06);transition: transform 0.1s, background 0.2s;}
+.home-btn:hover {opacity:0.95; transform: translateY(-1px);}
+.small{font-size:13px;color:#475569}
+@media (max-width:720px){ .passage{font-size:16px} }
+</style>
+</head>
+<body>
+<div style="margin:12px auto;max-width:980px;display:flex;gap:12px;align-items:center;justify-content:flex-start">
+  <a href="index.html" class="home-btn">🏠 На главную</a>
+</div>
+
+<div class="container" role="main" aria-label="Чтение и вопросы">
+  <div class="top">
+    <div>
+      <h1>Чтение + вопросы — прочитай и ответь</h1>
+      <div class="instructions">Прочитай короткий текст (2–3 предложения). Ответь на вопрос — выбери вариант. Текст и вопрос воспроизводятся голосом.</div>
+    </div>
+
+    <div style="text-align:right">
+      <div class="badges">
+        <div class="badge" id="remainingBadge">Осталось блоков: —</div>
+        <div class="badge" id="repeatsBadge">Осталось повторов: —</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" aria-live="polite" id="card">
+    <div id="passageText" class="passage">—</div>
+
+    <div id="questionBlock" style="display:none">
+      <div class="question" id="questionText">—</div>
+      <div class="choices" id="choicesContainer" role="list"></div>
+    </div>
+
+    <div class="controls">
+      <button id="playBtn" class="button">▶ Прослушать</button>
+      <button id="checkBtn" class="button">Проверить</button>
+      <button id="nextBtn" class="button ghost">Пропустить</button>
+      <button id="restartBtn" class="button ghost">Перезапустить</button>
+    </div>
+
+    <div id="feedback" class="feedback"></div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', ()=> {
+  /* ====== Контент: блоки текста + вопросы (подбери по учебнику) ====== */
+  const ITEMS = [
+    {
+      id: 'fam1',
+      passage: "This is my father. He is tall. He likes tea.",
+      question: "What does the father like?",
+      choices: ["tea", "coffee", "bread", "milk"],
+      answer: "tea"
+    },
+    {
+      id: 'room1',
+      passage: "This is my room. I have a bed and a lamp. The lamp is on.",
+      question: "What is in the room?",
+      choices: ["bed", "dog", "car", "fruit"],
+      answer: "bed"
+    },
+    {
+      id: 'animals1',
+      passage: "I have a small cat. The cat likes milk and sleeps on the bed.",
+      question: "Where does the cat sleep?",
+      choices: ["on the bed", "in the garden", "in the box", "under the tree"],
+      answer: "on the bed"
+    },
+    {
+      id: 'toys1',
+      passage: "Tom has a red ball. He throws the ball and his friend catches it.",
+      question: "What color is the ball?",
+      choices: ["red", "blue", "green", "yellow"],
+      answer: "red"
+    },
+    {
+      id: 'feelings1',
+      passage: "Anna is happy. She smiles and says, 'I am fine.'",
+      question: "How does Anna feel?",
+      choices: ["happy", "sad", "tired", "angry"],
+      answer: "happy"
+    },
+    {
+      id: 'food1',
+      passage: "We eat apples and bread. My sister eats an apple every day.",
+      question: "What does the sister eat every day?",
+      choices: ["an apple", "rice", "meat", "cheese"],
+      answer: "an apple"
+    }
+  ];
+
+  const MAX_SUCCESS = 2;
+  const STORAGE_KEY = 'reading_questions_v1';
+
+  /* ====== DOM ====== */
+  const passageText = document.getElementById('passageText');
+  const questionBlock = document.getElementById('questionBlock');
+  const questionText = document.getElementById('questionText');
+  const choicesContainer = document.getElementById('choicesContainer');
+  const playBtn = document.getElementById('playBtn');
+  const checkBtn = document.getElementById('checkBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const feedback = document.getElementById('feedback');
+  const remainingBadge = document.getElementById('remainingBadge');
+  const repeatsBadge = document.getElementById('repeatsBadge');
+
+  /* ====== State ====== */
+  let itemState = {}; // { id: count }
+  let pending = [];   // remaining item ids in this round
+  let current = null; // current item object
+  let chosenChoice = null;
+  let chosenVoice = null;
+
+  /* ====== Voices helper ====== */
+  function loadVoicesOnce(){
+    if(!('speechSynthesis' in window)) return;
+    const vs = speechSynthesis.getVoices();
+    if(vs && vs.length){
+      chosenVoice = vs.find(v=> v.lang && v.lang.toLowerCase().startsWith('en')) || vs[0];
+    } else {
+      speechSynthesis.onvoiceschanged = ()=> {
+        const vs2 = speechSynthesis.getVoices();
+        chosenVoice = vs2.find(v=> v.lang && v.lang.toLowerCase().startsWith('en')) || vs2[0];
+      };
+    }
+  }
+
+  /* ====== Storage ====== */
+  function loadState(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw){ itemState = JSON.parse(raw); return; }
+    } catch(e){ console.warn(e); }
+    ITEMS.forEach(it => itemState[it.id] = 0);
+  }
+  function saveState(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(itemState)); }catch(e){ console.warn('save error', e); } }
+
+  /* ====== Utilities ====== */
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+  /* ====== Prepare queue ====== */
+  function preparePending(){
+    const arr = ITEMS.filter(it => (itemState[it.id]||0) < MAX_SUCCESS).map(it => it.id);
+    pending = shuffle(arr.slice());
+  }
+
+  /* ====== UI render ====== */
+  function renderCurrent(){
+    if(!current){
+      passageText.textContent = '🎉 Поздравляем! Все тексты пройдены.';
+      questionBlock.style.display = 'none';
+      updateBadges();
+      return;
+    }
+    passageText.textContent = current.passage;
+    questionBlock.style.display = 'block';
+    // set question and shuffled choices
+    questionText.textContent = current.question;
+    // shuffle choices copy
+    const choices = shuffle(current.choices.slice());
+    choicesContainer.innerHTML = '';
+    choices.forEach(ch => {
+      const d = document.createElement('div');
+      d.className = 'choice';
+      d.setAttribute('role','button');
+      d.tabIndex = 0;
+      d.textContent = ch;
+      d.addEventListener('click', ()=> selectChoice(d, ch));
+      d.addEventListener('keydown', (e)=> { if(e.key === 'Enter' || e.key === ' ') { selectChoice(d,ch); e.preventDefault(); } });
+      choicesContainer.appendChild(d);
+    });
+    chosenChoice = null;
+    feedback.textContent = '';
+    updateBadges();
+  }
+
+  function selectChoice(elem, choice){
+    // remove selection from others
+    Array.from(choicesContainer.children).forEach(c => c.classList.remove('selected'));
+    elem.classList.add('selected');
+    chosenChoice = choice;
+    feedback.textContent = '';
+  }
+
+  /* ====== Speak passage + question ====== */
+  function speakCurrent(){
+    if(!current || !('speechSynthesis' in window)) return;
+    const passageUt = new SpeechSynthesisUtterance(current.passage);
+    passageUt.lang = 'en-US'; passageUt.rate = 0.95;
+    if(chosenVoice) passageUt.voice = chosenVoice;
+    passageUt.onend = ()=> {
+      const qUt = new SpeechSynthesisUtterance(current.question);
+      qUt.lang = 'en-US'; qUt.rate = 0.95;
+      if(chosenVoice) qUt.voice = chosenVoice;
+      speechSynthesis.cancel();
+      speechSynthesis.speak(qUt);
+    };
+    speechSynthesis.cancel();
+    speechSynthesis.speak(passageUt);
+  }
+
+  /* ====== Answer checking ====== */
+  function checkAnswer(){
+    if(!current){ return; }
+    if(!chosenChoice){
+      feedback.textContent = 'Выберите вариант ответа.';
+      feedback.style.color = '#b45309';
+      return;
+    }
+    // find all choice elements
+    const elems = Array.from(choicesContainer.children);
+    elems.forEach(e=> e.classList.remove('correct','wrong'));
+    if(chosenChoice === current.answer){
+      feedback.textContent = '✅ Верно!';
+      feedback.style.color = 'green';
+      // mark correct element
+      elems.forEach(e=> { if(e.textContent === chosenChoice) e.classList.add('correct'); });
+      // increment persistent counter
+      itemState[current.id] = Math.min(MAX_SUCCESS, (itemState[current.id]||0) + 1);
+      saveState();
+      // after delay load next
+      setTimeout(()=> {
+        loadNext();
+      }, 900);
+    } else {
+      feedback.textContent = '❌ Неправильно — попробуй ещё раз.';
+      feedback.style.color = '#b91c1c';
+      // mark chosen wrong and highlight correct
+      elems.forEach(e=> { if(e.textContent === chosenChoice) e.classList.add('wrong'); if(e.textContent === current.answer) e.classList.add('correct'); });
+    }
+    updateBadges();
+  }
+
+  /* ====== Load next item ====== */
+  function loadNext(){
+    preparePending();
+    if(pending.length === 0){
+      current = null;
+      renderCurrent();
+      return;
+    }
+    const id = pending.shift();
+    current = ITEMS.find(it => it.id === id) || null;
+    renderCurrent();
+    // auto-play passage + question
+    setTimeout(()=> speakCurrent(), 180);
+  }
+
+  function updateBadges(){
+    const remainingCount = ITEMS.filter(it => (itemState[it.id]||0) < MAX_SUCCESS).length;
+    remainingBadge.textContent = `Осталось блоков: ${remainingCount}`;
+    const repeatsLeft = ITEMS.reduce((acc,it)=> acc + Math.max(0, MAX_SUCCESS - (itemState[it.id]||0)), 0);
+    repeatsBadge.textContent = `Осталось повторов: ${repeatsLeft}`;
+  }
+
+  function restartAll(){
+    if(!confirm('Перезапустить прогресс и очистить сохранение?')) return;
+    OBJECTS = null;
+    localStorage.removeItem(STORAGE_KEY);
+    ITEMS.forEach(it => itemState[it.id] = 0);
+    saveState();
+    preparePending();
+    loadNext();
+    feedback.textContent = '';
+  }
+
+  /* ====== Handlers ====== */
+  playBtn.addEventListener('click', ()=> { if(current) speakCurrent(); });
+  checkBtn.addEventListener('click', checkAnswer);
+  nextBtn.addEventListener('click', ()=> { loadNext(); });
+  restartBtn.addEventListener('click', ()=> {
+    if(confirm('Перезапустить прогресс?')) {
+      ITEMS.forEach(it => itemState[it.id] = 0);
+      saveState();
+      preparePending();
+      loadNext();
+      feedback.textContent = '';
+    }
+  });
+
+  // keyboard: numbers 1..4 select choices if visible
+  document.addEventListener('keydown', (e)=>{
+    if(!current) return;
+    const k = e.key;
+    if(/^[1-9]$/.test(k)){
+      const idx = Number(k) - 1;
+      const elems = Array.from(choicesContainer.children);
+      if(elems[idx]) {
+        elems[idx].click();
+        e.preventDefault();
+      }
+    }
+    if(k === 'Enter'){ checkAnswer(); e.preventDefault(); }
+  });
+
+  /* ====== Init ====== */
+  loadVoicesOnce();
+  loadState();
+  preparePending();
+  loadNext();
+  updateBadges();
+  window.addEventListener('beforeunload', saveState);
+});
+</script>
+</body>
+</html>
