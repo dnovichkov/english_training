@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Перетасовка букв — по разделам</title>
+<meta name="description" content="Собери слово из букв. Слова организованы по разделам (темам). Уровни сложности: 2/4/6 лишних букв.">
+<style>
+:root{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;margin:0}
+body{margin:0;padding:18px;background:#f6fbff;color:#07203a}
+.container{max-width:980px;margin:20px auto;background:#fff;padding:18px;border-radius:12px;box-shadow:0 8px 30px rgba(3,10,18,0.06)}
+h1{font-size:20px;margin:0 0 10px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.instructions{color:#475569;font-size:14px;margin-top:6px}
+.board{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;margin-top:12px}
+.slots{display:flex;gap:8px;flex-wrap:nowrap;align-items:center}
+.slot{width:56px;height:56px;border:2px dashed #cbd5e1;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;background:#f8fafc;user-select:none;cursor:pointer;transition:background .15s,border-color .15s}
+.slot.filled{border-style:solid;background:#fff}
+.slot.correct{background:#dcfce7;border-color:#86efac}
+.slot.wrong{background:#fee2e2;border-color:#fca5a5}
+.tiles{display:flex;gap:8px;flex-wrap:wrap;padding:12px;border-radius:10px;background:#eef2ff;min-height:72px;align-items:center}
+.tile{min-width:48px;height:48px;border-radius:10px;background:#fff;border:1px solid #cbd5e1;display:inline-flex;align-items:center;justify-content:center;font-weight:800;cursor:grab;user-select:none;padding:6px 10px}
+.tile.dragging{opacity:0.4}
+.tile.used{opacity:0.35;cursor:default}
+.controls{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
+.button{background:#3b82f6;color:#fff;padding:8px 12px;border-radius:8px;border:0;cursor:pointer;font-weight:700}
+.button.ghost{background:#6b7280}
+.small{font-size:13px;color:#475569}
+.feedback{margin-top:12px;min-height:26px;font-weight:700;text-align:center}
+.badges{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.badge{padding:6px 10px;border-radius:999px;background:#f1f5f9;border:1px solid #e2e8f0;font-weight:700}
+.home-btn {display:inline-block;background:#10b981;color:#fff;padding:8px 14px;border-radius:10px;font-weight:700;text-decoration:none;font-size:16px;box-shadow:0 4px 10px rgba(0,0,0,0.06);transition: transform 0.1s, background 0.2s;}
+.home-btn:hover {opacity:0.95; transform: translateY(-1px);}
+.selector{padding:6px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;font-weight:700}
+@media (max-width:720px){ .slot{width:44px;height:44px;font-size:18px} .tile{min-width:40px;height:40px} }
+</style>
+</head>
+<body>
+<div style="margin:12px auto;max-width:980px;display:flex;gap:12px;align-items:center;justify-content:flex-start">
+  <a href="index.html" class="home-btn">🏠 На главную</a>
+</div>
+
+<div class="container" role="application" aria-label="Перетасовка букв — по разделам">
+  <div class="top">
+    <div style="min-width:280px">
+      <h1>Перетасовка букв — собрать слово</h1>
+      <div class="instructions">Выберите раздел (тему), затем соберите слово из плиток с буквами. Уровень сложности задаёт число лишних букв.</div>
+      <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label class="small" for="sectionSelect">Раздел:</label>
+        <select id="sectionSelect" class="selector" aria-label="Выбор раздела"></select>
+
+        <label class="small" for="difficulty" style="margin-left:6px">Сложность:</label>
+        <select id="difficulty" class="selector" aria-label="Выбор уровня сложности">
+          <option value="2">2 лишних</option>
+          <option value="4">4 лишних</option>
+          <option value="6">6 лишних</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="text-align:right">
+      <div class="badges">
+        <div class="badge" id="remainingBadge">Осталось слов: —</div>
+        <div class="badge" id="repeatsBadge">Осталось повторов: —</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="board">
+    <div style="flex:1;min-width:240px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="small">Слоты (клик — удалить букву)</div>
+        <div style="margin-left:auto" class="small">Слово: <strong id="wordIndex">—</strong></div>
+      </div>
+
+      <div style="margin-top:10px" class="slots" id="slotsContainer" aria-live="polite" aria-label="Слоты для букв"></div>
+
+      <div class="controls">
+        <button id="playBtn" class="button">▶ Прослушать</button>
+        <button id="checkBtn" class="button">Проверить</button>
+        <button id="clearBtn" class="button ghost">Очистить</button>
+      </div>
+
+      <div id="feedback" class="feedback" aria-atomic="true"></div>
+    </div>
+
+    <div style="flex:1;min-width:260px">
+      <div class="small">Плитки с буквами (перетащи или кликни):</div>
+      <div class="tiles" id="tilesContainer" aria-label="Плитки с буквами"></div>
+    </div>
+  </div>
+
+  <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+    <button id="restartBtn" class="button ghost">Перезапустить (сброс)</button>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', ()=> {
+  /* ====== ТЕМЫ / СЕКЦИИ (подбери слова по учебнику) ====== */
+  const SECTIONS = {
+    "Животные": ["cat","dog","duck","pig","cow","sheep"],
+    "Овощи": ["carrot","tomato","potato","cucumber","pepper"],
+    "Моя семья": ["mother","father","brother","sister","grandmother","grandfather"],
+    "Моя комната": ["bed","desk","chair","lamp","window","wardrobe"],
+    "Простые слова": ["sun","hat","book","pen","ball"]
+  };
+
+  const MAX_SUCCESS = 2;
+  const STORAGE_KEY = 'letters_shuffle_sections_v1';
+  const DIFFICULTY_KEY = 'letters_shuffle_level_v1';
+  const ALPHABET = 'abcdefghijklmnopqrstuvwxyz'.split('');
+
+  /* ====== DOM ====== */
+  const sectionSelect = document.getElementById('sectionSelect');
+  const difficultySelect = document.getElementById('difficulty');
+  const slotsContainer = document.getElementById('slotsContainer');
+  const tilesContainer = document.getElementById('tilesContainer');
+  const playBtn = document.getElementById('playBtn');
+  const checkBtn = document.getElementById('checkBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const feedback = document.getElementById('feedback');
+  const remainingBadge = document.getElementById('remainingBadge');
+  const repeatsBadge = document.getElementById('repeatsBadge');
+  const wordIndexEl = document.getElementById('wordIndex');
+
+  /* ====== State ======
+    saved structure in localStorage:
+    {
+      selected: "Раздел",
+      difficulty: 2|4|6,
+      data: {
+        "Раздел": { wordState: {word: count, ...}, wordCounter: N },
+        ...
+      }
+    }
+  */
+  let globalState = { selected: null, difficulty: 2, data: {} };
+  let currentSectionWords = [];
+  let pending = []; // words left for current section
+  let current = null;
+  let tiles = [];
+  let tileById = {};
+  let wordCounter = 0;
+  let chosenVoice = null;
+
+  /* ====== Voices helper ====== */
+  function loadVoices(){
+    if(!('speechSynthesis' in window)) return;
+    const vs = speechSynthesis.getVoices();
+    if(vs && vs.length){
+      chosenVoice = vs.find(v => v.lang && v.lang.toLowerCase().startsWith('en')) || vs[0];
+    } else {
+      speechSynthesis.onvoiceschanged = ()=> {
+        const vs2 = speechSynthesis.getVoices();
+        chosenVoice = vs2.find(v => v.lang && v.lang.toLowerCase().startsWith('en')) || vs2[0];
+      };
+    }
+  }
+
+  /* ====== Storage ====== */
+  function loadGlobalState(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw){
+        globalState = JSON.parse(raw);
+        // ensure all sections exist in data
+        Object.keys(SECTIONS).forEach(sec => {
+          if(!globalState.data) globalState.data = {};
+          if(!globalState.data[sec]) {
+            const obj = { wordState: {}, wordCounter: 0 };
+            SECTIONS[sec].forEach(w=> obj.wordState[w] = 0);
+            globalState.data[sec] = obj;
+          } else {
+            // ensure every word exists in saved wordState
+            SECTIONS[sec].forEach(w => { if(globalState.data[sec].wordState[w] === undefined) globalState.data[sec].wordState[w]=0; });
+          }
+        });
+        if(!globalState.selected) globalState.selected = Object.keys(SECTIONS)[0];
+        if(!globalState.difficulty) globalState.difficulty = 2;
+        return;
+      }
+    }catch(e){ console.warn('loadGlobalState error', e); }
+    // init fresh
+    globalState = { selected: Object.keys(SECTIONS)[0], difficulty: 2, data: {} };
+    Object.keys(SECTIONS).forEach(sec => {
+      const obj = { wordState: {} , wordCounter: 0 };
+      SECTIONS[sec].forEach(w=> obj.wordState[w]=0);
+      globalState.data[sec] = obj;
+    });
+  }
+
+  function saveGlobalState(){
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(globalState)); } catch(e){ console.warn('save error', e); }
+  }
+
+  /* ====== Utilities ====== */
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+  function uid(prefix='t'){ return prefix + Math.random().toString(36).slice(2,9); }
+
+  /* ====== Section selection UI ====== */
+  function populateSections(){
+    sectionSelect.innerHTML = '';
+    Object.keys(SECTIONS).forEach(sec => {
+      const opt = document.createElement('option');
+      opt.value = sec;
+      opt.textContent = sec;
+      sectionSelect.appendChild(opt);
+    });
+    sectionSelect.value = globalState.selected;
+    difficultySelect.value = String(globalState.difficulty);
+  }
+
+  /* ====== Build tiles / slots ====== */
+  function preparePending(){
+    const wordState = globalState.data[globalState.selected].wordState;
+    const arr = SECTIONS[globalState.selected].filter(w => (wordState[w] || 0) < MAX_SUCCESS);
+    pending = shuffle(arr.slice());
+  }
+
+  function buildTileLetters(word, extraCount){
+    const letters = word.split('');
+    const excluded = new Set(letters.map(ch => ch.toLowerCase()));
+    const pool = ALPHABET.filter(ch => !excluded.has(ch));
+    const poolCopy = pool.length ? pool.slice() : ALPHABET.slice();
+    const extra = [];
+    for(let i=0;i<extraCount;i++){
+      if(poolCopy.length === 0) poolCopy.push(...ALPHABET);
+      const idx = Math.floor(Math.random()*poolCopy.length);
+      extra.push(poolCopy.splice(idx,1)[0]);
+    }
+    return shuffle(letters.concat(extra));
+  }
+
+  function buildTilesFor(word){
+    tilesContainer.innerHTML = '';
+    tiles = [];
+    tileById = {};
+    const extraCount = Number(globalState.difficulty) || 2;
+    const lettersArr = buildTileLetters(word, extraCount);
+    lettersArr.forEach(ch => {
+      const id = uid('tile');
+      const tile = { id, letter: ch.toLowerCase(), used: false };
+      tiles.push(tile);
+      const div = document.createElement('div');
+      div.className = 'tile';
+      div.draggable = true;
+      div.id = id;
+      div.innerText = ch.toUpperCase();
+      div.addEventListener('dragstart', (ev)=>{
+        ev.dataTransfer.setData('text/plain', id);
+        div.classList.add('dragging');
+      });
+      div.addEventListener('dragend', ()=> div.classList.remove('dragging'));
+      div.addEventListener('click', ()=>{
+        if(tile.used) return;
+        const slot = firstEmptySlot();
+        if(slot) placeTileToSlot(id, slot);
+      });
+      tilesContainer.appendChild(div);
+      tileById[id] = div;
+    });
+  }
+
+  function buildSlotsFor(word){
+    slotsContainer.innerHTML = '';
+    for(let i=0;i<word.length;i++){
+      const s = document.createElement('div');
+      s.className = 'slot';
+      s.dataset.pos = i;
+      s.dataset.expected = word[i];
+      s.dataset.tileId = '';
+      s.addEventListener('dragover', e => e.preventDefault());
+      s.addEventListener('drop', e=>{
+        e.preventDefault();
+        const tileId = e.dataTransfer.getData('text/plain');
+        if(!tileId) return;
+        placeTileToSlot(tileId, s);
+      });
+      s.addEventListener('click', ()=> {
+        if(s.dataset.tileId) removeLetterFromSlot(s);
+      });
+      slotsContainer.appendChild(s);
+    }
+  }
+
+  function firstEmptySlot(){ return Array.from(slotsContainer.children).find(s => !s.dataset.tileId); }
+  function lastFilledSlot(){ const arr = Array.from(slotsContainer.children); for(let i=arr.length-1;i>=0;i--) if(arr[i].dataset.tileId) return arr[i]; return null; }
+
+  function placeTileToSlot(tileId, slot){
+    const tileObj = tiles.find(t => t.id === tileId);
+    if(!tileObj || tileObj.used) return;
+    slot.textContent = tileObj.letter.toUpperCase();
+    slot.classList.add('filled');
+    slot.dataset.tileId = tileId;
+    tileObj.used = true;
+    const tileEl = tileById[tileId];
+    if(tileEl) tileEl.classList.add('used');
+    feedback.textContent = '';
+  }
+
+  function removeLetterFromSlot(slot){
+    const tileId = slot.dataset.tileId;
+    if(!tileId) return;
+    slot.textContent = '';
+    slot.classList.remove('filled','correct','wrong');
+    slot.dataset.tileId = '';
+    const tileObj = tiles.find(t=>t.id === tileId);
+    if(tileObj) tileObj.used = false;
+    const tileEl = tileById[tileId];
+    if(tileEl) tileEl.classList.remove('used');
+  }
+
+  /* ====== Game logic ====== */
+  function loadNext(){
+    preparePending();
+    if(pending.length === 0){
+      feedback.innerHTML = '🎉 Поздравляем! Все слова пройдены в этом разделе.';
+      remainingBadge.textContent = 'Осталось слов: 0';
+      repeatsBadge.textContent = 'Осталось повторов: 0';
+      slotsContainer.innerHTML = '';
+      tilesContainer.innerHTML = '';
+      current = null;
+      saveGlobalState();
+      return;
+    }
+    current = pending[0];
+    // increment visible counter for UI
+    wordCounter = ++globalState.data[globalState.selected].wordCounter;
+    wordIndexEl.textContent = wordCounter;
+    buildSlotsFor(current);
+    buildTilesFor(current);
+    updateBadges();
+    speak(current);
+    saveGlobalState();
+  }
+
+  function checkAnswer(){
+    if(!current) return;
+    const slots = Array.from(slotsContainer.children);
+    const empty = slots.some(s => !s.dataset.tileId);
+    if(empty){
+      feedback.textContent = 'Заполните все слоты перед проверкой.';
+      feedback.style.color = '#b45309';
+      slots.filter(s => !s.dataset.tileId).forEach(s => { s.classList.add('wrong'); setTimeout(()=> s.classList.remove('wrong'),700); });
+      return;
+    }
+    const formed = slots.map(s => s.textContent.toLowerCase()).join('');
+    if(formed === current){
+      feedback.textContent = '✅ Верно!';
+      feedback.style.color = 'green';
+      slots.forEach(s => { s.classList.remove('wrong'); s.classList.add('correct'); });
+      // increment count for this word in this section
+      const ws = globalState.data[globalState.selected].wordState;
+      ws[current] = Math.min(MAX_SUCCESS, (ws[current]||0) + 1);
+      saveGlobalState();
+      setTimeout(()=> {
+        slots.forEach(s => s.classList.remove('correct'));
+        loadNext();
+      }, 900);
+    } else {
+      feedback.textContent = '❌ Есть ошибки — попробуй ещё раз.';
+      feedback.style.color = '#b91c1c';
+      const expected = current.split('');
+      slots.forEach((s,i) => {
+        if(s.textContent.toLowerCase() === expected[i]) s.classList.add('correct');
+        else s.classList.add('wrong');
+      });
+      setTimeout(()=> { slots.forEach(s=> s.classList.remove('wrong')); }, 800);
+    }
+    updateBadges();
+  }
+
+  function clearSlots(){
+    Array.from(slotsContainer.children).forEach(s=>{
+      if(s.dataset.tileId) removeLetterFromSlot(s);
+      s.classList.remove('correct','wrong');
+      s.textContent = '';
+    });
+    feedback.textContent = '';
+  }
+
+  function updateBadges(){
+    const ws = globalState.data[globalState.selected].wordState;
+    const remainingWords = SECTIONS[globalState.selected].filter(w => (ws[w] || 0) < MAX_SUCCESS).length;
+    remainingBadge.textContent = `Осталось слов: ${remainingWords}`;
+    const repeatsLeft = SECTIONS[globalState.selected].reduce((acc,w)=> acc + Math.max(0, MAX_SUCCESS - (ws[w]||0)), 0);
+    repeatsBadge.textContent = `Осталось повторов: ${repeatsLeft}`;
+  }
+
+  function restartAll(){
+    if(!confirm('Перезапустить прогресс в этом разделе?')) return;
+    // reset only current section
+    const sec = globalState.selected;
+    SECTIONS[sec].forEach(w => globalState.data[sec].wordState[w] = 0);
+    globalState.data[sec].wordCounter = 0;
+    saveGlobalState();
+    wordCounter = 0;
+    loadNext();
+    feedback.textContent = '';
+  }
+
+  function speak(word){
+    if(!('speechSynthesis' in window) || !word) return;
+    const u = new SpeechSynthesisUtterance(word);
+    u.lang = 'en-US';
+    u.rate = 0.95;
+    if(chosenVoice) u.voice = chosenVoice;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  }
+
+  /* ====== Keyboard support ====== */
+  document.addEventListener('keydown', (ev)=>{
+    if(!current) return;
+    const k = ev.key;
+    if(k.length === 1 && /^[a-zA-Z]$/.test(k)){
+      const tile = tiles.find(t => !t.used && t.letter.toLowerCase() === k.toLowerCase());
+      if(tile){
+        const slot = firstEmptySlot();
+        if(slot) placeTileToSlot(tile.id, slot);
+      }
+      ev.preventDefault();
+      return;
+    }
+    if(k === 'Backspace'){
+      const last = lastFilledSlot();
+      if(last) removeLetterFromSlot(last);
+      ev.preventDefault();
+      return;
+    }
+    if(k === 'Enter'){
+      checkAnswer();
+      ev.preventDefault();
+      return;
+    }
+  });
+
+  /* ====== Handlers ====== */
+  playBtn.addEventListener('click', ()=> { if(current) speak(current); });
+  checkBtn.addEventListener('click', checkAnswer);
+  clearBtn.addEventListener('click', clearSlots);
+  restartBtn.addEventListener('click', restartAll);
+
+  sectionSelect.addEventListener('change', ()=> {
+    globalState.selected = sectionSelect.value;
+    saveGlobalState();
+    // reload words for new section
+    loadNext();
+  });
+
+  difficultySelect.addEventListener('change', ()=> {
+    const val = Number(difficultySelect.value) || 2;
+    globalState.difficulty = val;
+    saveGlobalState();
+    // rebuild tiles for current word with new extra count, if any
+    if(current) buildTilesFor(current);
+  });
+
+  /* ====== Init ====== */
+  loadVoices();
+  loadGlobalState();
+  populateSections();
+  // ensure difficulty and selected are applied
+  sectionSelect.value = globalState.selected;
+  difficultySelect.value = String(globalState.difficulty);
+  loadNext();
+  updateBadges();
+  window.addEventListener('beforeunload', saveGlobalState);
+});
+</script>
+</body>
+</html>
