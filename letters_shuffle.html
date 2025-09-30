@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Перетасовка букв — собрать слово</title>
+<meta name="description" content="Тренажёр: собрать слово из букв (drag & drop / клик). Развиваем навык письма.">
+<style>
+:root{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;margin:0}
+body{margin:0;padding:18px;background:#f6fbff;color:#07203a}
+.container{max-width:980px;margin:20px auto;background:#fff;padding:18px;border-radius:12px;box-shadow:0 8px 30px rgba(3,10,18,0.06)}
+h1{font-size:20px;margin:0 0 10px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.instructions{color:#475569;font-size:14px;margin-top:6px}
+.board{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;margin-top:12px}
+.slots{display:flex;gap:8px;flex-wrap:nowrap;align-items:center}
+.slot{width:56px;height:56px;border:2px dashed #cbd5e1;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;background:#f8fafc;user-select:none;cursor:pointer;transition:background .15s,border-color .15s}
+.slot.filled{border-style:solid;background:#fff}
+.slot.correct{background:#dcfce7;border-color:#86efac}
+.slot.wrong{background:#fee2e2;border-color:#fca5a5}
+.tiles{display:flex;gap:8px;flex-wrap:wrap;padding:12px;border-radius:10px;background:#eef2ff;min-height:72px;align-items:center}
+.tile{min-width:48px;height:48px;border-radius:10px;background:#fff;border:1px solid #cbd5e1;display:inline-flex;align-items:center;justify-content:center;font-weight:800;cursor:grab;user-select:none;padding:6px 10px}
+.tile.dragging{opacity:0.4}
+.tile.used{opacity:0.35;cursor:default}
+.controls{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
+.button{background:#3b82f6;color:#fff;padding:8px 12px;border-radius:8px;border:0;cursor:pointer;font-weight:700}
+.button.ghost{background:#6b7280}
+.small{font-size:13px;color:#475569}
+.feedback{margin-top:12px;min-height:26px;font-weight:700;text-align:center}
+.badges{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.badge{padding:6px 10px;border-radius:999px;background:#f1f5f9;border:1px solid #e2e8f0;font-weight:700}
+.home-btn {display:inline-block;background:#10b981;color:#fff;padding:8px 14px;border-radius:10px;font-weight:700;text-decoration:none;font-size:16px;box-shadow:0 4px 10px rgba(0,0,0,0.06);transition: transform 0.1s, background 0.2s;}
+.home-btn:hover {opacity:0.95; transform: translateY(-1px);}
+.debug{font-size:12px;color:#7a1f1f;background:#fff7f7;border-radius:8px;padding:8px;margin-top:10px;display:none}
+@media (max-width:720px){ .slot{width:44px;height:44px;font-size:18px} .tile{min-width:40px;height:40px} }
+</style>
+</head>
+<body>
+<div style="margin:12px auto;max-width:980px;display:flex;gap:12px;align-items:center;justify-content:flex-start">
+  <a href="index.html" class="home-btn">🏠 На главную</a>
+</div>
+
+<div class="container" role="application" aria-label="Перетасовка букв — собрать слово">
+  <div class="top">
+    <div>
+      <h1>Перетасовка букв — собрать слово</h1>
+      <div class="instructions">Собери слово из букв: перетащи плитки с буквами на слоты или кликни по плитке (вставится в первый пустой слот). Клик по слоту удалит букву и вернёт плитку.</div>
+    </div>
+
+    <div style="text-align:right">
+      <div class="badges">
+        <div class="badge" id="remainingBadge">Осталось слов: —</div>
+        <div class="badge" id="repeatsBadge">Осталось повторов: —</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="board">
+    <div style="flex:1;min-width:240px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="small">Слоты (клик — удалить букву):</div>
+        <div style="margin-left:auto" class="small">Слово: <strong id="wordIndex">—</strong></div>
+      </div>
+      <div style="margin-top:10px" class="slots" id="slotsContainer" aria-live="polite" aria-label="Слоты для букв"></div>
+
+      <div class="controls">
+        <button id="playBtn" class="button">▶ Прослушать</button>
+        <button id="checkBtn" class="button">Проверить</button>
+        <button id="clearBtn" class="button ghost">Очистить</button>
+      </div>
+
+      <div id="feedback" class="feedback" aria-atomic="true"></div>
+    </div>
+
+    <div style="flex:1;min-width:260px">
+      <div class="small">Плитки с буквами (перетащи или кликни):</div>
+      <div class="tiles" id="tilesContainer" aria-label="Плитки с буквами"></div>
+    </div>
+  </div>
+
+  <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+    <button id="restartBtn" class="button ghost">Перезапустить (сброс)</button>
+  </div>
+
+  <div id="debug" class="debug"></div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', ()=> {
+  // ====== Конфигурация ======
+  const WORDS = ["cat","dog","bed","book","lamp","chair"]; // простые слова из 2-го класса
+  const MAX_SUCCESS = 2;
+  const STORAGE_KEY = 'letters_shuffle_trainer_v1';
+
+  // ====== DOM ======
+  const slotsContainer = document.getElementById('slotsContainer');
+  const tilesContainer = document.getElementById('tilesContainer');
+  const playBtn = document.getElementById('playBtn');
+  const checkBtn = document.getElementById('checkBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const feedback = document.getElementById('feedback');
+  const remainingBadge = document.getElementById('remainingBadge');
+  const repeatsBadge = document.getElementById('repeatsBadge');
+  const wordIndexEl = document.getElementById('wordIndex');
+  const debugEl = document.getElementById('debug');
+
+  // ====== State ======
+  let wordState = {}; // { word: {count} }
+  let pending = []; // words with count < MAX_SUCCESS (for display)
+  let current = null; // current target word (string)
+  let tiles = []; // current tiles array [{id,letter,used}]
+  let tileById = {}; // map id -> DOM element
+  let wordCounter = 0;
+  let chosenVoice = null;
+
+  // ====== Voices helper ======
+  function loadVoices(){
+    if(!('speechSynthesis' in window)) return;
+    const vs = speechSynthesis.getVoices();
+    if(vs && vs.length){
+      chosenVoice = vs.find(v => v.lang && v.lang.toLowerCase().startsWith('en')) || vs[0];
+    } else {
+      speechSynthesis.onvoiceschanged = ()=> {
+        const vs2 = speechSynthesis.getVoices();
+        chosenVoice = vs2.find(v => v.lang && v.lang.toLowerCase().startsWith('en')) || vs2[0];
+      };
+    }
+  }
+
+  // ====== Storage ======
+  function loadState(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw){
+        wordState = JSON.parse(raw);
+        // ensure all words exist (in case list changed)
+        WORDS.forEach(w => { if(!wordState[w]) wordState[w] = {count:0}; });
+        return;
+      }
+    }catch(e){ console.warn('loadState error', e); }
+    WORDS.forEach(w => wordState[w] = {count:0});
+  }
+  function saveState(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(wordState)); }catch(e){ console.warn('save error', e); } }
+
+  // ====== Utilities ======
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+  function uid(prefix='t'){ return prefix + Math.random().toString(36).slice(2,9); }
+  function logDebug(msg){ /*debugEl.style.display='block'; debugEl.textContent += msg + "\\n";*/ console.log(msg); }
+
+  // ====== UI builders ======
+  function preparePending(){
+    const arr = WORDS.filter(w => (wordState[w].count || 0) < MAX_SUCCESS);
+    pending = shuffle(arr.slice());
+  }
+
+  function buildTilesFor(word){
+    tilesContainer.innerHTML = '';
+    tiles = [];
+    tileById = {};
+    // create tile per letter (preserve duplicates)
+    const letters = word.split('');
+    // create extra distractors? For now exactly letters - shuffle them
+    const order = shuffle(letters.map((ch,i) => ({ch, idx:i})));
+    order.forEach(o => {
+      const id = uid('tile');
+      const tile = {id, letter: o.ch, used:false};
+      tiles.push(tile);
+      const div = document.createElement('div');
+      div.className = 'tile';
+      div.draggable = true;
+      div.id = id;
+      div.innerText = o.ch.toUpperCase();
+      // dragstart
+      div.addEventListener('dragstart', (ev)=>{
+        ev.dataTransfer.setData('text/plain', id);
+        div.classList.add('dragging');
+      });
+      div.addEventListener('dragend', ()=> div.classList.remove('dragging'));
+      // click -> insert to first empty slot
+      div.addEventListener('click', ()=>{
+        if(tile.used) return;
+        const slot = firstEmptySlot();
+        if(slot) placeTileToSlot(id, slot);
+      });
+      tilesContainer.appendChild(div);
+      tileById[id] = div;
+    });
+  }
+
+  function buildSlotsFor(word){
+    slotsContainer.innerHTML = '';
+    for(let i=0;i<word.length;i++){
+      const s = document.createElement('div');
+      s.className = 'slot';
+      s.dataset.pos = i;
+      s.dataset.expected = word[i];
+      s.dataset.tileId = '';
+      // allow drop
+      s.addEventListener('dragover', e => e.preventDefault());
+      s.addEventListener('drop', e=>{
+        e.preventDefault();
+        const tileId = e.dataTransfer.getData('text/plain');
+        if(!tileId) return;
+        placeTileToSlot(tileId, s);
+      });
+      // click to remove letter (return tile)
+      s.addEventListener('click', ()=>{
+        if(s.dataset.tileId){
+          removeLetterFromSlot(s);
+        }
+      });
+      slotsContainer.appendChild(s);
+    }
+  }
+
+  function firstEmptySlot(){
+    return Array.from(slotsContainer.children).find(s => !s.dataset.tileId);
+  }
+
+  function lastFilledSlot(){
+    const arr = Array.from(slotsContainer.children);
+    for(let i=arr.length-1;i>=0;i--) if(arr[i].dataset.tileId) return arr[i];
+    return null;
+  }
+
+  function placeTileToSlot(tileId, slot){
+    const tileObj = tiles.find(t=>t.id===tileId);
+    if(!tileObj || tileObj.used) return;
+    // set slot text
+    slot.textContent = tileObj.letter.toUpperCase();
+    slot.classList.add('filled');
+    slot.dataset.tileId = tileId;
+    tileObj.used = true;
+    const tileEl = tileById[tileId];
+    if(tileEl) tileEl.classList.add('used');
+    feedback.textContent = '';
+  }
+
+  function removeLetterFromSlot(slot){
+    const tileId = slot.dataset.tileId;
+    if(!tileId) return;
+    // clear slot
+    slot.textContent = '';
+    slot.classList.remove('filled','correct','wrong');
+    slot.dataset.tileId = '';
+    // mark tile unused
+    const tileObj = tiles.find(t=>t.id===tileId);
+    if(tileObj) tileObj.used = false;
+    const tileEl = tileById[tileId];
+    if(tileEl) tileEl.classList.remove('used');
+  }
+
+  // ====== Game logic ======
+  function loadNext(){
+    preparePending();
+    if(pending.length === 0){
+      // finished
+      feedback.innerHTML = '🎉 Поздравляем! Все слова пройдены.';
+      remainingBadge.textContent = 'Осталось слов: 0';
+      repeatsBadge.textContent = 'Осталось повторов: 0';
+      slotsContainer.innerHTML = '';
+      tilesContainer.innerHTML = '';
+      current = null;
+      return;
+    }
+    // choose current as first in pending
+    current = pending[0];
+    wordCounter++;
+    wordIndexEl.textContent = wordCounter;
+    buildSlotsFor(current);
+    buildTilesFor(current);
+    updateBadges();
+    // auto-play
+    speak(current);
+  }
+
+  function checkAnswer(){
+    if(!current) return;
+    const slots = Array.from(slotsContainer.children);
+    // if any slot is empty -> warn
+    const empty = slots.some(s => !s.dataset.tileId);
+    if(empty){
+      feedback.textContent = 'Заполните все слоты перед проверкой.';
+      feedback.style.color = '#b45309';
+      // highlight empties briefly
+      slots.filter(s => !s.dataset.tileId).forEach(s => { s.classList.add('wrong'); setTimeout(()=> s.classList.remove('wrong'),700); });
+      return;
+    }
+    const formed = slots.map(s => s.textContent.toLowerCase()).join('');
+    if(formed === current){
+      // correct
+      feedback.textContent = '✅ Верно!';
+      feedback.style.color = 'green';
+      slots.forEach(s => { s.classList.remove('wrong'); s.classList.add('correct'); });
+      // increment state
+      wordState[current].count = Math.min(MAX_SUCCESS, (wordState[current].count||0) + 1);
+      saveState();
+      // remove current from pending so it won't be chosen immediately next
+      // but loadNext will recompute pending
+      setTimeout(()=> {
+        // clear slot visuals and load next
+        slots.forEach(s => s.classList.remove('correct'));
+        loadNext();
+      }, 900);
+    } else {
+      feedback.textContent = '❌ Есть ошибки — попробуй ещё раз.';
+      feedback.style.color = '#b91c1c';
+      // mark wrong letters
+      const expected = current.split('');
+      slots.forEach((s,i) => {
+        if(s.textContent.toLowerCase() === expected[i]) s.classList.add('correct');
+        else s.classList.add('wrong');
+      });
+      // remove wrong marker shortly
+      setTimeout(()=> { slots.forEach(s=> s.classList.remove('wrong')); }, 800);
+    }
+    updateBadges();
+  }
+
+  function clearSlots(){
+    Array.from(slotsContainer.children).forEach(s => {
+      if(s.dataset.tileId) removeLetterFromSlot(s);
+      s.classList.remove('correct','wrong');
+      s.textContent = '';
+    });
+    feedback.textContent = '';
+  }
+
+  function speak(word){
+    if(!('speechSynthesis' in window) || !word) return;
+    const u = new SpeechSynthesisUtterance(word);
+    u.lang = 'en-US';
+    u.rate = 0.95;
+    if(chosenVoice) u.voice = chosenVoice;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+    logDebug('Speak: ' + word + (chosenVoice ? ' ('+chosenVoice.name+')' : ''));
+  }
+
+  function updateBadges(){
+    const remainingWords = WORDS.filter(w => (wordState[w].count||0) < MAX_SUCCESS).length;
+    remainingBadge.textContent = `Осталось слов: ${remainingWords}`;
+    const repeatsLeft = WORDS.reduce((acc,w)=> acc + Math.max(0, MAX_SUCCESS - (wordState[w].count||0)), 0);
+    repeatsBadge.textContent = `Осталось повторов: ${repeatsLeft}`;
+  }
+
+  function restartAll(){
+    if(!confirm('Перезапустить прогресс и очистить сохранение?')) return;
+    localStorage.removeItem(STORAGE_KEY);
+    WORDS.forEach(w => wordState[w] = {count:0});
+    saveState();
+    wordCounter = 0;
+    loadNext();
+    feedback.textContent = '';
+  }
+
+  // keyboard support: allow letters and Backspace/Enter
+  document.addEventListener('keydown', (ev)=>{
+    if(!current) return;
+    const k = ev.key;
+    if(k.length === 1 && /^[a-zA-Z]$/.test(k)){
+      // find first unused tile with that letter
+      const tile = tiles.find(t => !t.used && t.letter.toLowerCase() === k.toLowerCase());
+      if(tile){
+        const slot = firstEmptySlot();
+        if(slot) placeTileToSlot(tile.id, slot);
+      }
+      ev.preventDefault();
+      return;
+    }
+    if(k === 'Backspace'){
+      const last = lastFilledSlot();
+      if(last) removeLetterFromSlot(last);
+      ev.preventDefault();
+      return;
+    }
+    if(k === 'Enter'){
+      checkAnswer();
+      ev.preventDefault();
+      return;
+    }
+  });
+
+  // Button handlers
+  playBtn.addEventListener('click', ()=> { if(current) speak(current); });
+  checkBtn.addEventListener('click', checkAnswer);
+  clearBtn.addEventListener('click', clearSlots);
+  restartBtn.addEventListener('click', restartAll);
+
+  // Init
+  loadVoices();
+  loadState();
+  preparePending();
+  loadNext();
+  updateBadges();
+  // save before unload
+  window.addEventListener('beforeunload', saveState);
+});
+</script>
+</body>
+</html>
