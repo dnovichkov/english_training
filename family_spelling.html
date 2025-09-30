@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Тренажёр — Моя семья Spelling + TTS</title>
+<style>
+:root{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;margin:0}
+body{margin:0;padding:18px;background:#f6fbff;color:#07203a}
+.container{max-width:980px;margin:0 auto;background:#fff;padding:18px;border-radius:12px;box-shadow:0 8px 30px rgba(3,10,18,0.06)}
+h1{font-size:20px;margin:0 0 6px}
+.top{display:flex;gap:12px;align-items:center;justify-content:space-between}
+.slots{display:flex;gap:8px;flex-wrap:nowrap;margin-bottom:8px}
+.slot{width:50px;height:60px;border:2px dashed #cbd5e1;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;background:#f8fafc;user-select:none}
+.slot.filled{border-style:solid;background:#fff}
+.controls{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
+.alpha-btn{min-width:40px;height:40px;padding:6px 8px;border-radius:8px;background:#fff;border:1px solid #cbd5e1;cursor:pointer;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.alpha-btn:active{transform:translateY(1px)}
+.feedback{margin-top:12px;min-height:24px;font-weight:700}
+.correct{background:#dcfce7;border-color:#86efac}
+.wrong{background:#fee2e2;border-color:#fca5a5}
+.progress{height:10px;background:#e6eef6;border-radius:999px;overflow:hidden;margin-top:8px}
+.progress > i{display:block;height:100%;background:#34d399;width:0%}
+.home-btn {display:inline-block;background:#3b82f6;color:#fff;padding:8px 14px;border-radius:10px;font-weight:700;text-decoration:none;font-size:16px;box-shadow:0 4px 10px rgba(0,0,0,0.1);transition: transform 0.1s, background 0.2s;}
+.home-btn:hover {background:#2563eb;}
+.home-btn:active {transform:translateY(1px);}
+</style>
+</head>
+<body>
+<div style="margin-bottom:12px; display:flex; justify-content:flex-start">
+  <a href="index.html" class="home-btn">🏠 На главную</a>
+</div>
+
+<div class="container">
+  <div class="top">
+    <h1>Тренажёр — Моя семья Spelling</h1>
+    <div style="text-align:right">
+      <div class="progress" style="width:220px"><i id="progressBar"></i></div>
+      <div class="small">Прогресс: <strong id="progressText">0 / 0</strong></div>
+    </div>
+  </div>
+
+  <p class="small">Набери слово, обозначающее член семьи, используя экранную клавиатуру или физическую.</p>
+
+  <div class="slots" id="slotsContainer"></div>
+
+  <div class="controls" id="keyboardContainer"></div>
+
+  <button id="playBtn" class="alpha-btn">▶ Прослушать</button>
+  <button id="checkBtn" class="alpha-btn">Проверить</button>
+  <button id="clearBtn" class="alpha-btn">Очистить</button>
+
+  <div id="feedback" class="feedback"></div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', ()=>{
+  const WORDS=[
+    "father","mother","brother","sister","grandfather","grandmother"
+  ];
+  const MAX_SUCCESS=2;
+  const STORAGE_KEY='family_spelling_v1';
+  const ALPHABET='abcdefghijklmnopqrstuvwxyz'.split('');
+  let wordState={}, remainingSeq=[], currentWord=null, wordCounter=0;
+
+  const slotsContainer=document.getElementById('slotsContainer');
+  const keyboardContainer=document.getElementById('keyboardContainer');
+  const feedback=document.getElementById('feedback');
+  const progressBar=document.getElementById('progressBar');
+  const progressText=document.getElementById('progressText');
+  const playBtn=document.getElementById('playBtn');
+  const checkBtn=document.getElementById('checkBtn');
+  const clearBtn=document.getElementById('clearBtn');
+
+  function loadState(){
+    try{
+      const raw=localStorage.getItem(STORAGE_KEY);
+      if(raw){ wordState=JSON.parse(raw); return; }
+    }catch(e){console.warn(e);}
+    WORDS.forEach(w=>wordState[w]={count:0});
+  }
+
+  function saveState(){ localStorage.setItem(STORAGE_KEY,JSON.stringify(wordState)); }
+
+  function prepareNextSeq(){
+    remainingSeq=WORDS.filter(w=>wordState[w].count<MAX_SUCCESS).slice();
+    shuffleArray(remainingSeq);
+  }
+
+  function loadNextWord(){
+    if(!remainingSeq.length) prepareNextSeq();
+    if(!remainingSeq.length){
+      feedback.textContent='🎉 Все слова пройдены дважды!';
+      slotsContainer.innerHTML='';
+      return;
+    }
+    currentWord=remainingSeq.shift();
+    wordCounter++;
+    setupSlots(currentWord);
+    speak(currentWord);
+    updateProgress();
+  }
+
+  function setupSlots(word){
+    slotsContainer.innerHTML='';
+    for(let i=0;i<word.length;i++){
+      const s=document.createElement('div');
+      s.className='slot';
+      s.dataset.pos=i;
+      s.dataset.expected=word[i];
+      s.addEventListener('click', ()=> { s.textContent=''; s.classList.remove('filled','correct','wrong'); });
+      slotsContainer.appendChild(s);
+    }
+  }
+
+  function firstEmptySlot(){ return Array.from(slotsContainer.children).find(s=>!s.textContent.trim()); }
+  function lastFilledSlot(){ const arr=Array.from(slotsContainer.children); for(let i=arr.length-1;i>=0;i--) if(arr[i].textContent.trim()) return arr[i]; return null; }
+
+  function insertLetter(ch){
+    const slot = Array.from(slotsContainer.children).find(s => !s.textContent.trim());
+    if(!slot) return;
+    slot.textContent = ch;
+    slot.classList.add('filled');
+  }
+
+
+  function checkAnswer(){
+    const slots=Array.from(slotsContainer.children);
+    const formed=slots.map(s=>s.textContent.trim()||'');
+    if(formed.includes('')){
+      feedback.textContent='Заполните все слоты';
+      return;
+    }
+    let ok=true;
+    slots.forEach((s,i)=>{ if(s.textContent===currentWord[i]){ s.classList.add('correct'); }else{ s.classList.add('wrong'); ok=false; }});
+    if(ok){
+      feedback.style.color='green';
+      feedback.textContent='Верно!';
+      wordState[currentWord].count=Math.min(MAX_SUCCESS,wordState[currentWord].count+1);
+      saveState();
+      setTimeout(()=>{ loadNextWord(); feedback.textContent=''; },800);
+    } else{
+      feedback.style.color='red';
+      feedback.textContent='Ошибка, попробуйте ещё раз';
+    }
+    updateProgress();
+  }
+
+  function clearSlots(){ Array.from(slotsContainer.children).forEach(s=>{ s.textContent=''; s.classList.remove('filled','correct','wrong'); }); feedback.textContent=''; }
+
+  function buildKeyboard(){
+    keyboardContainer.innerHTML='';
+    ALPHABET.concat([' ']).forEach(ch=>{
+      const btn=document.createElement('button');
+      btn.className='alpha-btn';
+      btn.textContent = ch === ' ' ? '␣' : ch; // визуально пробел
+      btn.addEventListener('click', ()=> insertLetter(ch)); // вставляем правильный символ
+      keyboardContainer.appendChild(btn);
+    });
+  }
+
+
+  function updateProgress(){
+    const total=WORDS.length*MAX_SUCCESS;
+    const done=Object.values(wordState).reduce((s,x)=>s+x.count,0);
+    const pct=total===0?0:Math.round(done/total*100);
+    progressBar.style.width=pct+'%';
+    progressText.textContent=`${done} / ${total}`;
+  }
+
+  function speak(word){
+    if('speechSynthesis' in window){
+      const u=new SpeechSynthesisUtterance(word);
+      u.lang='en-US'; u.rate=0.95;
+      speechSynthesis.cancel(); speechSynthesis.speak(u);
+    }
+  }
+
+  playBtn.addEventListener('click', ()=>{ if(currentWord) speak(currentWord); });
+  checkBtn.addEventListener('click', checkAnswer);
+  clearBtn.addEventListener('click', clearSlots);
+
+  document.addEventListener('keydown',(ev)=>{
+    const k=ev.key;
+    if(k.length===1 && /^[a-zA-Z ]$/.test(k)){
+      insertLetter(k.toLowerCase());
+      ev.preventDefault();
+    }
+    if(k==='Backspace'){ const last=lastFilledSlot(); if(last){ last.textContent=''; last.classList.remove('filled','correct','wrong'); } ev.preventDefault(); }
+    if(k==='Enter'){ checkAnswer(); ev.preventDefault(); }
+  });
+
+  function shuffleArray(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+  loadState();
+  buildKeyboard();
+  prepareNextSeq();
+  loadNextWord();
+});
+</script>
+</body>
+</html>

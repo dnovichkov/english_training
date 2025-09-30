@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Тренажёр — Моя семья</title>
+<meta name="description" content="Тренажёр для изучения слов на тему 'Моя семья'. Разместить слова на схеме семьи.">
+<style>
+:root{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;margin:0}
+body{margin:0;padding:18px;background:#f6fbff;color:#07203a}
+.container{max-width:980px;margin:0 auto;background:#fff;padding:18px;border-radius:12px;box-shadow:0 8px 30px rgba(3,10,18,0.06)}
+h1{font-size:20px;margin:0 0 6px}
+.tiles{display:flex;gap:12px;flex-wrap:wrap;padding:12px;border-radius:10px;background:#eef2ff}
+.tile{width:140px;height:140px;border:2px solid #cbd5e1;border-radius:12px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;background:#fff;cursor:pointer}
+.tile img{max-width:100%;max-height:100%}
+.word-list{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;justify-content:center}
+.word{padding:6px 12px;border-radius:8px;background:#fff;border:1px solid #cbd5e1;cursor:grab;user-select:none;font-weight:700;color:#07203a}
+.word.dragging{opacity:0.5}
+.feedback{margin-top:12px;min-height:24px;font-weight:700;text-align:center}
+.correct{background:#dcfce7;border-color:#86efac}
+.wrong{background:#fee2e2;border-color:#fca5a5}
+.home-btn {display:inline-block;background:#3b82f6;color:#fff;padding:8px 14px;border-radius:10px;font-weight:700;text-decoration:none;font-size:16px;box-shadow:0 4px 10px rgba(0,0,0,0.1);transition: transform 0.1s, background 0.2s;}
+.home-btn:hover {background:#2563eb;}
+.home-btn:active {transform:translateY(1px);}
+</style>
+</head>
+<body>
+
+<div style="margin-bottom:12px; display:flex; justify-content:flex-start">
+  <a href="index.html" class="home-btn">🏠 На главную</a>
+</div>
+
+<div class="container">
+  <h1>Тренажёр — Моя семья</h1>
+  <p class="small">Перетащи слово на правильного члена семьи на схеме. Слушай слово с помощью ▶ кнопки.</p>
+
+  <div class="tiles" id="familyTiles"></div>
+  <div class="word-list" id="wordList"></div>
+
+  <div class="feedback" id="feedback"></div>
+  <div style="text-align:center;margin-top:8px">
+    <span id="remainingBadge">Осталось слов: —</span>
+  </div>
+
+  <div style="display:flex;justify-content:center;gap:8px;margin-top:14px">
+    <button id="playBtn" class="tile">▶ Прослушать</button>
+    <button id="restartBtn" class="tile">Перезапустить</button>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', ()=>{
+  const FAMILY = [
+    {word:'mother', img:'images/mother.png'},
+    {word:'father', img:'images/father.png'},
+    {word:'brother', img:'images/brother.png'},
+    {word:'sister', img:'images/sister.png'},
+    {word:'grandmother', img:'images/grandmother.png'},
+    {word:'grandfather', img:'images/grandfather.png'}
+  ];
+
+  const MAX_SUCCESS = 1;
+  const STORAGE_KEY = 'family_trainer_v1';
+
+  let state = {};
+  let remaining = [];
+  let currentWord = null;
+
+  const familyTiles = document.getElementById('familyTiles');
+  const wordList = document.getElementById('wordList');
+  const feedback = document.getElementById('feedback');
+  const remainingBadge = document.getElementById('remainingBadge');
+  const playBtn = document.getElementById('playBtn');
+  const restartBtn = document.getElementById('restartBtn');
+
+  function loadState(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw){ state = JSON.parse(raw); return; }
+    } catch(e){ console.warn(e);}
+    FAMILY.forEach(f=> state[f.word]={count:0});
+  }
+
+  function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+  function shuffleArray(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+  function buildTiles(){
+    familyTiles.innerHTML = '';
+    remaining.forEach(f=>{
+      const div = document.createElement('div');
+      div.className='tile';
+      div.dataset.word=f.word;
+      const img = document.createElement('img');
+      img.src=f.img;
+      img.alt=f.word;
+      div.appendChild(img);
+
+      div.addEventListener('dragover', e=>e.preventDefault());
+      div.addEventListener('drop', e=>{
+        e.preventDefault();
+        const word = e.dataTransfer.getData('text/plain');
+        if(word===f.word){
+          feedback.textContent='✅ Верно!';
+          feedback.style.color='green';
+          state[f.word].count = Math.min(MAX_SUCCESS, state[f.word].count+1);
+          saveState();
+          loadNextWord();
+        } else {
+          feedback.textContent='❌ Ошибка, попробуй ещё раз';
+          feedback.style.color='red';
+        }
+      });
+      familyTiles.appendChild(div);
+    });
+  }
+
+  function buildWords(){
+    wordList.innerHTML='';
+    shuffleArray(remaining).forEach(f=>{
+      const div = document.createElement('div');
+      div.className='word';
+      div.textContent = f.word;
+      div.draggable=true;
+      div.addEventListener('dragstart', e=>{
+        e.dataTransfer.setData('text/plain',f.word);
+        div.classList.add('dragging');
+      });
+      div.addEventListener('dragend', e=>div.classList.remove('dragging'));
+      wordList.appendChild(div);
+    });
+  }
+
+  function updateRemaining(){
+    const left = FAMILY.filter(f=> state[f.word].count<MAX_SUCCESS).length;
+    remainingBadge.textContent = `Осталось слов: ${left}`;
+  }
+
+  function speak(word){
+    if('speechSynthesis' in window){
+      const u = new SpeechSynthesisUtterance(word);
+      u.lang='en-US'; u.rate=0.95;
+      speechSynthesis.cancel(); speechSynthesis.speak(u);
+    }
+  }
+
+  function loadNextWord(){
+    const pending = FAMILY.filter(f=> state[f.word].count<MAX_SUCCESS);
+    if(!pending.length){
+      feedback.textContent = '🎉 Поздравляем! Все слова отгаданы!';
+      remainingBadge.textContent = 'Осталось слов: 0';
+      return;
+    }
+    currentWord = shuffleArray(pending.slice())[0]; // выбираем текущее слово
+    remaining = pending.slice(); // передаём все оставшиеся слова для отображения
+    buildTiles();
+    buildWords();
+    updateRemaining();
+    speak(currentWord.word);
+  }
+
+  playBtn.addEventListener('click', ()=>{ if(currentWord) speak(currentWord.word); });
+
+  restartBtn.addEventListener('click', ()=>{
+    if(confirm('Перезапустить прогресс?')){
+      localStorage.removeItem(STORAGE_KEY);
+      FAMILY.forEach(f=> state[f.word]={count:0});
+      loadNextWord();
+      feedback.textContent='';
+    }
+  });
+
+  loadState();
+  loadNextWord();
+});
+</script>
+
+</body>
+</html>
