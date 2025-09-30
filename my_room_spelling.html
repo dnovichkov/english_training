@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Тренажёр — Моя комната (Spelling) + TTS + прогресс</title>
+<meta name="description" content="Упражнение для закрепления написания слов на тему 'Моя комната'. Набирай слова буквами с экранной клавиатуры.">
+<style>
+:root{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;margin:0}
+body{margin:0;padding:18px;background:#f6fbff;color:#07203a}
+.container{max-width:980px;margin:0 auto;background:#fff;padding:18px;border-radius:12px;box-shadow:0 8px 30px rgba(3,10,18,0.06)}
+h1{font-size:20px;margin:0 0 6px}
+.top{display:flex;gap:12px;align-items:center;justify-content:space-between}
+.slots{display:flex;gap:8px;flex-wrap:nowrap;margin-bottom:8px;overflow-x:auto;padding-bottom:6px}
+.slot{width:50px;height:60px;border:2px dashed #cbd5e1;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;background:#f8fafc;user-select:none}
+.slot.filled{border-style:solid;background:#fff}
+.tiles{display:flex;gap:8px;flex-wrap:wrap;padding:12px;border-radius:10px;background:#eef2ff}
+.alpha-btn{min-width:40px;height:40px;padding:6px 8px;border-radius:8px;background:#fff;border:1px solid #cbd5e1;cursor:pointer;font-weight:700;user-select:none;color:#07203a;font-size:16px;display:inline-flex;align-items:center;justify-content:center;line-height:1;box-sizing:border-box;}
+.alpha-btn:active{transform:translateY(1px)}
+.feedback{margin-top:12px;min-height:24px;font-weight:700}
+.correct{background:#dcfce7;border-color:#86efac}
+.wrong{background:#fee2e2;border-color:#fca5a5}
+.progress{height:10px;background:#e6eef6;border-radius:999px;overflow:hidden;margin-top:8px}
+.progress > i{display:block;height:100%;background:#34d399;width:0%}
+.home-btn {display:inline-block;background:#3b82f6;color:#fff;padding:8px 14px;border-radius:10px;font-weight:700;text-decoration:none;font-size:16px;box-shadow:0 4px 10px rgba(0,0,0,0.1);transition: transform 0.1s, background 0.2s;}
+.home-btn:hover {background:#2563eb;}
+.home-btn:active {transform:translateY(1px);}
+</style>
+</head>
+<body>
+<div style="margin-bottom:12px; display:flex; justify-content:flex-start">
+  <a href="index.html" class="home-btn">🏠 На главную</a>
+</div>
+
+<div class="container">
+  <div class="top">
+    <h1>Тренажёр — Моя комната (Spelling)</h1>
+    <div style="text-align:right">
+      <div class="progress" style="width:220px"><i id="progressBar"></i></div>
+      <div class="small">Прогресс: <strong id="progressText">0 / 0</strong></div>
+    </div>
+  </div>
+
+  <p class="small">Слушай слово и набирай его буквами из алфавита или с клавиатуры. Backspace — удалить, Enter — проверить.</p>
+
+  <div class="slots" id="slotsContainer"></div>
+
+  <div class="tiles" id="alphabetContainer" aria-label="Алфавит"></div>
+
+  <div class="feedback" id="feedback"></div>
+
+  <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+    <button id="playBtn" class="alpha-btn">▶ Прослушать</button>
+    <button id="checkBtn" class="alpha-btn">Проверить</button>
+    <button id="clearBtn" class="alpha-btn">Очистить</button>
+    <button id="restartBtn" class="alpha-btn">Перезапустить</button>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', ()=>{
+  const WORDS = ["bed","desk","chair","lamp","wardrobe","window"];
+  const MAX_SUCCESS = 2;
+  const ALPHABET = 'abcdefghijklmnopqrstuvwxyz '.split('');
+  const STORAGE_KEY = 'my_room_spelling_v1';
+
+  let wordState = {};
+  let remainingSeq = [];
+  let currentWord = null;
+  let progressBar = document.getElementById('progressBar');
+  let progressText = document.getElementById('progressText');
+  let feedback = document.getElementById('feedback');
+  let slotsContainer = document.getElementById('slotsContainer');
+  let alphabetContainer = document.getElementById('alphabetContainer');
+
+  function loadState(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw){
+        wordState = JSON.parse(raw);
+        return;
+      }
+    }catch(e){ console.warn(e);}
+    WORDS.forEach(w => wordState[w]={count:0});
+  }
+
+  function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(wordState)); }
+
+  function shuffleArray(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+  function buildAlphabet(){
+    alphabetContainer.innerHTML='';
+    ALPHABET.forEach(ch=>{
+      const btn = document.createElement('button');
+      btn.type='button';
+      btn.className='alpha-btn';
+      btn.textContent=ch===' ' ? '␣' : ch;
+      btn.addEventListener('click', ()=> insertLetter(ch));
+      alphabetContainer.appendChild(btn);
+    });
+  }
+
+  function prepareNextSeq(){
+    remainingSeq = WORDS.filter(w=>wordState[w].count<MAX_SUCCESS).slice();
+    shuffleArray(remainingSeq);
+  }
+
+  function loadNextWord(){
+    if(!remainingSeq.length) prepareNextSeq();
+    if(!remainingSeq.length){
+      feedback.textContent='Поздравляем! Все слова введены правильно дважды 🎉';
+      slotsContainer.innerHTML='';
+      return;
+    }
+    currentWord = remainingSeq.shift();
+    setupSlots(currentWord);
+    updateProgress();
+    speak(currentWord);
+  }
+
+  function setupSlots(word){
+    slotsContainer.innerHTML='';
+    for(let i=0;i<word.length;i++){
+      const s = document.createElement('div');
+      s.className='slot';
+      s.dataset.expected = word[i];
+      s.addEventListener('click', ()=> {
+        if(s.textContent){ s.textContent=''; s.classList.remove('filled','correct','wrong'); }
+      });
+      slotsContainer.appendChild(s);
+    }
+  }
+
+  function firstEmptySlot(){ return Array.from(slotsContainer.children).find(s=>!s.textContent); }
+  function lastFilledSlot(){ const arr = Array.from(slotsContainer.children); for(let i=arr.length-1;i>=0;i--) if(arr[i].textContent) return arr[i]; return null; }
+
+  function insertLetter(ch){
+    const slot = firstEmptySlot();
+    if(!slot){ feedback.textContent='Все слоты заполнены'; return; }
+    slot.textContent = ch;
+    slot.classList.add('filled');
+    feedback.textContent='';
+  }
+
+  function checkAnswer(){
+    const slots = Array.from(slotsContainer.children);
+    const formed = slots.map(s=>s.textContent||'').join('');
+    if(formed.includes('') && formed.length !== currentWord.length){
+      feedback.textContent='Заполните все слоты перед проверкой';
+      return;
+    }
+    let ok = formed === currentWord;
+    slots.forEach((s,i)=> s.classList.add(formed[i]===currentWord[i]?'correct':'wrong'));
+    if(ok){
+      feedback.textContent='✅ Верно!';
+      wordState[currentWord].count = Math.min(MAX_SUCCESS, wordState[currentWord].count+1);
+      saveState();
+      setTimeout(()=> loadNextWord(), 800);
+    } else {
+      feedback.textContent='❌ Есть ошибки — попробуй ещё раз';
+    }
+    updateProgress();
+  }
+
+  function updateProgress(){
+    const total = WORDS.length*MAX_SUCCESS;
+    const done = Object.values(wordState).reduce((s,x)=>s+x.count,0);
+    progressBar.style.width = total? Math.round(done/total*100)+'%' : '0%';
+    progressText.textContent = `${done} / ${total}`;
+  }
+
+  function speak(word){
+    if('speechSynthesis' in window){
+      const u = new SpeechSynthesisUtterance(word);
+      u.lang='en-US'; u.rate=0.95;
+      speechSynthesis.cancel();
+      speechSynthesis.speak(u);
+    }
+  }
+
+  document.getElementById('playBtn').addEventListener('click', ()=> speak(currentWord));
+  document.getElementById('checkBtn').addEventListener('click', checkAnswer);
+  document.getElementById('clearBtn').addEventListener('click', ()=> { Array.from(slotsContainer.children).forEach(s=>{s.textContent=''; s.className='slot';}); feedback.textContent=''; });
+  document.getElementById('restartBtn').addEventListener('click', ()=>{
+    if(confirm('Перезапустить прогресс?')){
+      localStorage.removeItem(STORAGE_KEY);
+      WORDS.forEach(w=>wordState[w]={count:0});
+      prepareNextSeq();
+      loadNextWord();
+    }
+  });
+
+  document.addEventListener('keydown', e=>{
+    if(!currentWord) return;
+    if(e.key.length===1 && /^[a-z ]$/i.test(e.key)){
+      insertLetter(e.key.toLowerCase());
+    } else if(e.key==='Backspace'){
+      const slot = lastFilledSlot();
+      if(slot){ slot.textContent=''; slot.classList.remove('filled','correct','wrong'); }
+    } else if(e.key==='Enter'){
+      checkAnswer();
+    }
+  });
+
+  loadState();
+  buildAlphabet();
+  prepareNextSeq();
+  loadNextWord();
+});
+</script>
+</body>
+</html>
