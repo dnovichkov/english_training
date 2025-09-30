@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Письмо — заполнить пропуски в предложении</title>
+<meta name="description" content="Заполни пропуск в простом предложении — набери пропущенное слово буквами.">
+<style>
+:root{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;margin:0}
+body{margin:0;padding:18px;background:#f6fbff;color:#07203a}
+.container{max-width:980px;margin:18px auto;background:#fff;padding:18px;border-radius:12px;box-shadow:0 8px 30px rgba(3,10,18,0.06)}
+h1{font-size:20px;margin:0 0 8px}
+.top{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.instructions{color:#475569;font-size:14px;margin-top:6px}
+.sentence{margin-top:12px;font-size:20px;background:#eef2ff;padding:12px;border-radius:10px}
+.blank{display:inline-block;min-width:90px;padding:4px 8px;border-bottom:2px dashed #cbd5e1;margin:0 6px;color:#07203a;font-weight:700}
+.slots{display:flex;gap:8px;flex-wrap:nowrap;margin-top:12px;overflow:auto;padding-bottom:6px}
+.slot{width:48px;height:56px;border:2px dashed #cbd5e1;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px;background:#f8fafc;user-select:none;cursor:pointer}
+.slot.filled{border-style:solid;background:#fff}
+.tiles{display:flex;gap:6px;flex-wrap:wrap;padding:12px;border-radius:10px;background:#fff;margin-top:12px;justify-content:center}
+.alpha-btn{min-width:36px;height:40px;padding:6px 8px;border-radius:8px;background:#fff;border:1px solid #cbd5e1;cursor:pointer;font-weight:700;color:#07203a;font-size:16px;display:inline-flex;align-items:center;justify-content:center;user-select:none}
+.alpha-btn:active{transform:translateY(1px)}
+.controls{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap;justify-content:center}
+button.cta{background:#10b981;color:#fff;border:0;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:700}
+button.ghost{background:#6b7280;color:#fff;border:0;padding:8px 12px;border-radius:8px;cursor:pointer}
+.small{font-size:13px;color:#475569}
+.feedback{margin-top:12px;min-height:24px;text-align:center;font-weight:700}
+.badges{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.badge{padding:6px 10px;border-radius:999px;background:#f1f5f9;border:1px solid #e2e8f0;font-weight:700}
+.home-btn {display:inline-block;background:#3b82f6;color:#fff;padding:8px 14px;border-radius:10px;font-weight:700;text-decoration:none;font-size:16px;box-shadow:0 4px 10px rgba(0,0,0,0.1);transition: transform 0.1s, background 0.2s;}
+.home-btn:hover {background:#2563eb;}
+.home-btn:active {transform:translateY(1px);}
+.correct{background:#dcfce7;border-color:#86efac}
+.wrong{background:#fee2e2;border-color:#fca5a5}
+.opt-row{display:flex;gap:12px;align-items:center;margin-top:8px}
+.toggle{display:inline-flex;align-items:center;gap:8px}
+@media (max-width:720px){ .slot{width:40px;height:46px;font-size:18px} .blank{min-width:60px} }
+</style>
+</head>
+<body>
+<div style="margin-bottom:12px; display:flex; justify-content:flex-start">
+  <a href="index.html" class="home-btn">🏠 На главную</a>
+</div>
+
+<div class="container" role="main" aria-label="Заполнить пропуск в предложении">
+  <div class="top">
+    <div>
+      <h1>Письмо — заполнить пропуск</h1>
+      <div class="instructions">Прочитай предложение и напиши пропущенное слово буквами (экранная клавиатура или физическая). Backspace — удалить, Enter — проверить.</div>
+      <div class="opt-row">
+        <label class="toggle"><input type="checkbox" id="pronounceMissing"> <span class="small">Произносить пропущенное слово</span></label>
+        <span class="small" style="color:#475569">Если выключено — будет пауза вместо слова.</span>
+      </div>
+    </div>
+
+    <div style="text-align:right">
+      <div class="badges">
+        <div class="badge" id="remainingBadge">Осталось: —</div>
+        <div class="badge" id="repeatsBadge">Осталось повторов: —</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sentence" id="sentenceArea" aria-live="polite">
+    <span id="beforeText">—</span>
+    <span class="blank" id="blankSpan">_______</span>
+    <span id="afterText">—</span>
+  </div>
+
+  <div class="slots" id="slotsContainer" aria-label="Слоты для букв"></div>
+
+  <div class="tiles" id="alphabetContainer" aria-label="Экранная клавиатура"></div>
+
+  <div class="controls">
+    <button id="playBtn" class="cta">▶ Прослушать</button>
+    <button id="checkBtn" class="cta">Проверить</button>
+    <button id="clearBtn" class="ghost">Очистить</button>
+    <button id="restartBtn" class="ghost">Перезапустить</button>
+  </div>
+
+  <div id="feedback" class="feedback"></div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', ()=> {
+  /* ====== Данные (можно заменить на точные упражнения из учебника) ====== */
+  const ITEMS = [
+    { id: 'i_have', before: 'I have a', after: '.', answer: 'cat' },
+    { id: 'this_is', before: 'This is my', after: '.', answer: 'bed' },
+    { id: 'she_likes', before: 'She likes', after: '.', answer: 'tea' },
+    { id: 'open_window', before: 'Please open the', after: '.', answer: 'window' },
+    { id: 'my_book', before: 'I read a', after: 'every day.', answer: 'book' },
+    { id: 'red_ball', before: 'He has a', after: 'ball.', answer: 'red' }
+  ];
+
+  const MAX_SUCCESS = 2;
+  const STORAGE_KEY = 'fill_the_gap_v1';
+  const PRONOUNCE_KEY = 'fill_the_gap_pronounce_missing';
+  const ALPHABET = 'abcdefghijklmnopqrstuvwxyz'.split('');
+
+  /* ====== DOM ====== */
+  const beforeText = document.getElementById('beforeText');
+  const afterText = document.getElementById('afterText');
+  const blankSpan = document.getElementById('blankSpan');
+  const slotsContainer = document.getElementById('slotsContainer');
+  const alphabetContainer = document.getElementById('alphabetContainer');
+  const playBtn = document.getElementById('playBtn');
+  const checkBtn = document.getElementById('checkBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const feedback = document.getElementById('feedback');
+  const remainingBadge = document.getElementById('remainingBadge');
+  const repeatsBadge = document.getElementById('repeatsBadge');
+  const pronounceMissingCheckbox = document.getElementById('pronounceMissing');
+
+  /* ====== State ====== */
+  let itemState = {}; // { id: count }
+  let pending = [];
+  let current = null; // current item object
+  let chosenVoice = null;
+  let wordIndex = 0;
+
+  /* ====== Voices helper ====== */
+  function loadVoicesOnce(){
+    if(!('speechSynthesis' in window)) return;
+    const vs = speechSynthesis.getVoices();
+    if(vs && vs.length){
+      chosenVoice = vs.find(v=> v.lang && v.lang.toLowerCase().startsWith('en')) || vs[0];
+    } else {
+      speechSynthesis.onvoiceschanged = ()=> {
+        const vs2 = speechSynthesis.getVoices();
+        chosenVoice = vs2.find(v=> v.lang && v.lang.toLowerCase().startsWith('en')) || vs2[0];
+      };
+    }
+  }
+
+  /* ====== Storage ====== */
+  function loadState(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw){ itemState = JSON.parse(raw); }
+      else ITEMS.forEach(it => itemState[it.id] = 0);
+    } catch(e){ console.warn(e); ITEMS.forEach(it => itemState[it.id] = 0); }
+    // load pronounce option
+    try{
+      const v = localStorage.getItem(PRONOUNCE_KEY);
+      pronounceMissingCheckbox.checked = v === null ? true : (v === 'true');
+    }catch(e){ pronounceMissingCheckbox.checked = true; }
+  }
+  function saveState(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(itemState)); }catch(e){ console.warn('save error', e); } }
+  function savePronounceOption(){ try{ localStorage.setItem(PRONOUNCE_KEY, String(pronounceMissingCheckbox.checked)); }catch(e){ console.warn('save option error', e); } }
+
+  /* ====== Utils ====== */
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+  function preparePending(){
+    const arr = ITEMS.filter(it => (itemState[it.id]||0) < MAX_SUCCESS).slice();
+    pending = shuffle(arr);
+  }
+
+  /* ====== UI builders ====== */
+  function buildAlphabet(){
+    alphabetContainer.innerHTML = '';
+    ALPHABET.forEach(ch=>{
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'alpha-btn';
+      btn.textContent = ch;
+      btn.addEventListener('click', ()=> insertLetter(ch));
+      alphabetContainer.appendChild(btn);
+    });
+  }
+
+  function setupSlotsFor(word){
+    slotsContainer.innerHTML = '';
+    for(let i=0;i<word.length;i++){
+      const s = document.createElement('div');
+      s.className = 'slot';
+      s.dataset.pos = i;
+      s.dataset.expected = word[i];
+      s.dataset.index = i;
+      s.addEventListener('click', ()=> {
+        if(s.textContent.trim()){
+          removeLetterAt(+s.dataset.index);
+        }
+      });
+      slotsContainer.appendChild(s);
+    }
+  }
+
+  function insertLetter(ch){
+    const slot = Array.from(slotsContainer.children).find(s => !s.textContent.trim());
+    if(!slot){
+      feedback.textContent = 'Все слоты заполнены';
+      return;
+    }
+    slot.textContent = ch;
+    slot.classList.add('filled');
+    feedback.textContent = '';
+  }
+
+  function removeLetterAt(idx){
+    const slots = Array.from(slotsContainer.children);
+    for(let i=idx;i<slots.length-1;i++){
+      slots[i].textContent = slots[i+1].textContent || '';
+      if(!slots[i].textContent) slots[i].classList.remove('filled');
+    }
+    const last = slots[slots.length-1];
+    last.textContent = '';
+    last.classList.remove('filled');
+  }
+
+  function getFormedWord(){
+    return Array.from(slotsContainer.children).map(s => s.textContent.trim() || '').join('');
+  }
+
+  function checkAnswer(){
+    if(!current) return;
+    const formed = getFormedWord();
+    if(formed.length !== current.answer.length){
+      feedback.textContent = 'Заполните все слоты';
+      feedback.style.color = '#b45309';
+      Array.from(slotsContainer.children).filter(s=>!s.textContent.trim()).forEach(s=> { s.classList.add('wrong'); setTimeout(()=> s.classList.remove('wrong'),700); });
+      return;
+    }
+    if(formed.toLowerCase() === current.answer.toLowerCase()){
+      feedback.textContent = '✅ Верно!';
+      feedback.style.color = 'green';
+      itemState[current.id] = Math.min(MAX_SUCCESS, (itemState[current.id]||0) + 1);
+      saveState();
+      updateBadges();
+      setTimeout(()=> loadNext(), 800);
+    } else {
+      feedback.textContent = '❌ Неправильно — попробуй ещё раз.';
+      feedback.style.color = '#b91c1c';
+      Array.from(slotsContainer.children).forEach((s,i) => {
+        if(s.textContent.toLowerCase() === current.answer[i].toLowerCase()) s.classList.add('correct');
+        else s.classList.add('wrong');
+      });
+      setTimeout(()=> Array.from(slotsContainer.children).forEach(s=> s.classList.remove('wrong','correct')), 900);
+    }
+  }
+
+  function clearSlots(){
+    Array.from(slotsContainer.children).forEach(s => { s.textContent=''; s.classList.remove('filled','correct','wrong'); });
+    feedback.textContent = '';
+  }
+
+  /* ====== TTS sequence speaker ====== */
+  // speakItems sequentially with small pauses
+  function speakItems(items){
+    if(!('speechSynthesis' in window) || !items || items.length === 0) return;
+    // cancel previous
+    speechSynthesis.cancel();
+    let i = 0;
+    function speakNext(){
+      if(i >= items.length) return;
+      const text = items[i];
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'en-US';
+      u.rate = 0.95;
+      if(chosenVoice) u.voice = chosenVoice;
+      u.onend = ()=> {
+        i++;
+        // small pause between items
+        setTimeout(speakNext, 260);
+      };
+      speechSynthesis.speak(u);
+    }
+    speakNext();
+  }
+
+  // speak sentence: before + (answer if enabled) + after
+  function speakSentence(item){
+    if(!('speechSynthesis' in window) || !item) return;
+    const before = (item.before || '').trim();
+    const after = (item.after || '').trim();
+    const pronounceMissing = pronounceMissingCheckbox.checked;
+    const items = [];
+    if(before) items.push(before);
+    if(pronounceMissing && item.answer) items.push(item.answer);
+    if(after) items.push(after);
+    // if nothing to say, abort
+    if(items.length === 0) return;
+    speakItems(items);
+  }
+
+  /* ====== Rendering current sentence ====== */
+  function renderCurrent(){
+    if(!current){
+      beforeText.textContent = '—';
+      blankSpan.textContent = '—';
+      afterText.textContent = '—';
+      slotsContainer.innerHTML = '';
+      feedback.textContent = '🎉 Все задания выполнены.';
+      updateBadges();
+      return;
+    }
+    beforeText.textContent = current.before;
+    blankSpan.textContent = '_______';
+    afterText.textContent = current.after;
+    setupSlotsFor(current.answer);
+    feedback.textContent = '';
+    updateBadges();
+    // auto-play sentence according to option
+    setTimeout(()=> speakSentence(current), 180);
+  }
+
+  /* ====== Load next / queue ====== */
+  function loadNext(){
+    preparePending();
+    if(pending.length === 0){
+      current = null;
+      renderCurrent();
+      return;
+    }
+    current = pending.shift();
+    wordIndex++;
+    renderCurrent();
+  }
+
+  function updateBadges(){
+    const remaining = ITEMS.filter(it => (itemState[it.id]||0) < MAX_SUCCESS).length;
+    remainingBadge.textContent = `Осталось: ${remaining}`;
+    const repeatsLeft = ITEMS.reduce((acc,it)=> acc + Math.max(0, MAX_SUCCESS - (itemState[it.id]||0)), 0);
+    repeatsBadge.textContent = `Осталось повторов: ${repeatsLeft}`;
+  }
+
+  function restartAll(){
+    if(!confirm('Перезапустить прогресс и очистить сохранение?')) return;
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(PRONOUNCE_KEY);
+    ITEMS.forEach(it => itemState[it.id] = 0);
+    saveState();
+    preparePending();
+    wordIndex = 0;
+    loadNext();
+    feedback.textContent = '';
+  }
+
+  /* ====== Keyboard support ====== */
+  document.addEventListener('keydown', (ev)=>{
+    if(!current) return;
+    const k = ev.key;
+    if(k.length === 1 && /^[a-zA-Z]$/.test(k)){
+      insertLetter(k.toLowerCase());
+      ev.preventDefault();
+      return;
+    }
+    if(k === 'Backspace'){
+      const arr = Array.from(slotsContainer.children);
+      for(let i=arr.length-1;i>=0;i--) if(arr[i].textContent.trim()){ arr[i].textContent=''; arr[i].classList.remove('filled','correct','wrong'); break; }
+      ev.preventDefault();
+      return;
+    }
+    if(k === 'Enter'){
+      checkAnswer();
+      ev.preventDefault();
+      return;
+    }
+  });
+
+  /* ====== Buttons handlers ====== */
+  playBtn.addEventListener('click', ()=> { if(current) speakSentence(current); });
+  checkBtn.addEventListener('click', checkAnswer);
+  clearBtn.addEventListener('click', clearSlots);
+  restartBtn.addEventListener('click', restartAll);
+  pronounceMissingCheckbox.addEventListener('change', ()=> { savePronounceOption(); });
+
+  /* ====== Init ====== */
+  loadVoicesOnce();
+  loadState();
+  buildAlphabet();
+  preparePending();
+  loadNext();
+  updateBadges();
+  window.addEventListener('beforeunload', saveState);
+});
+</script>
+</body>
+</html>
