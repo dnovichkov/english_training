@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Тренажёр правописания — Впиши буквы</title>
+<style>
+  :root{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;}
+  body{margin:0;padding:18px;background:#f5f7fb;color:#0f172a}
+  .container{max-width:880px;margin:0 auto;background:#fff;padding:18px;border-radius:10px;box-shadow:0 6px 20px rgba(15,23,42,0.06)}
+  h1{font-size:20px;margin:0 0 8px}
+  p.lead{margin:4px 0 16px;color:#334155}
+  .topbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+  button{background:#0ea5a4;border:0;color:white;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:600}
+  button:disabled{background:#9ca3af; cursor: not-allowed;}
+  button.secondary{background:#64748b}
+  .exercise-area{display:flex;gap:24px;align-items:center;flex-wrap:wrap;margin: 24px 0;}
+  .image-container {flex-shrink: 0;}
+  .word-image {max-width: 150px; height: auto; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);}
+  .inputs-container {display: flex; gap: 6px; align-items: center;}
+  .letter-box {width: 40px;height: 50px;border: 2px solid #cbd5e1;border-radius: 8px;display:flex;align-items:center;justify-content:center;font-size: 22px;font-weight: 700; text-transform: uppercase; background: #fff;}
+  .letter-box.given {border-style: dashed; background: #f8fafc; color: #475569;}
+  .letter-box.input {text-align: center; padding: 0; caret-color: #0ea5a4;}
+  .letter-box.input:focus {outline: 2px solid #3b82f6; border-color: #3b82f6;}
+  .letter-box.correct {background:#dcfce7;border-color:#86efac}
+  .letter-box.wrong {background:#fee2e2;border-color:#fca5a5}
+  .status{margin-top:12px; min-height: 20px;}
+  .progress{height:10px;background:#e2e8f0;border-radius:999px;overflow:hidden;margin-top:8px}
+  .progress > i{display:block;height:100%;background:#34d399;width:0%}
+  .small{font-size:13px;color:#475569}
+  .home-btn {display: inline-block;background: #3b82f6;color: #fff;padding: 8px 14px;border-radius: 10px;font-weight: 700;text-decoration: none;font-size: 16px;box-shadow: 0 4px 10px rgba(0,0,0,0.1);transition: transform 0.1s, background 0.2s;}
+  .home-btn:hover {background: #2563eb;}
+  .home-btn:active {transform: translateY(1px);}
+</style>
+</head>
+<body>
+
+<div style="margin-bottom:12px; display:flex; justify-content:flex-start">
+  <a href="index.html" class="home-btn">🏠 На главную</a>
+</div>
+
+<div class="container">
+  <h1>Тренажёр правописания — Впиши пропущенные буквы</h1>
+  <p class="lead">Посмотри на картинку и впиши недостающие буквы в ячейки.</p>
+
+  <div class="topbar">
+     <div class="small">Слово: <b id="currentWordIndex">№1</b></div>
+     <div style="margin-left:auto;text-align:right; flex-basis: 200px;">
+       <div class="small">Прогресс: <span id="progressText">0 / 0</span></div>
+       <div class="progress"><i id="progressBar"></i></div>
+     </div>
+  </div>
+
+  <div class="exercise-area">
+    <div class="image-container">
+        <img src="" alt="Изображение для слова" id="wordImage" class="word-image">
+    </div>
+    <div class="inputs-container" id="inputsContainer">
+        </div>
+  </div>
+
+  <div>
+      <button id="checkBtn">Проверить</button>
+      <button id="restartBtn" class="secondary">Перезапустить</button>
+  </div>
+  
+  <div class="status small" id="feedback"></div>
+
+</div>
+
+<script>
+/* ====== Настройки и слова ====== */
+// Структура:
+// word: полное правильное слово
+// partial: слово с пропусками, где _ обозначает пустую ячейку
+// image: путь к файлу картинки
+const EXERCISES = [
+  { word: "window",   partial: "w__d_w", image: "images/window.png" },
+  { word: "vest",     partial: "_e_t",   image: "images/vest.png" },
+  { word: "umbrella", partial: "_m__e__a", image: "images/umbrella.png" },
+  { word: "box",      partial: "b_x",    image: "images/box.png" },
+  { word: "zip",      partial: "__p",    image: "images/zip.png" },
+  { word: "snake",    partial: "s__k_",  image: "images/snake.png" },
+  { word: "tree",     partial: "t__e",   image: "images/tree.png" },
+  { word: "yacht",    partial: "_a_h_",  image: "images/yacht.png" },
+  { word: "rabbit",   partial: "_ _bb_t",  image: "images/rabbit.png" }
+];
+const STORAGE_KEY = 'spelling_trainer_v2_image_fill';
+
+/* ====== Состояние игры ====== */
+let progressState = {}; // word -> { completed: boolean }
+let currentExerciseIndex = 0;
+
+/* ====== DOM ====== */
+const imageEl = document.getElementById('wordImage');
+const inputsContainer = document.getElementById('inputsContainer');
+const checkBtn = document.getElementById('checkBtn');
+const feedback = document.getElementById('feedback');
+const progressBar = document.getElementById('progressBar');
+const progressText = document.getElementById('progressText');
+const currentWordIndexLabel = document.getElementById('currentWordIndex');
+const restartBtn = document.getElementById('restartBtn');
+
+/* ====== Инициализация и работа с хранилищем ====== */
+function loadFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const obj = JSON.parse(raw);
+    if (obj && obj.progressState) {
+      progressState = obj.progressState;
+      return true;
+    }
+  } catch (e) { console.warn('storage load error', e); }
+  return false;
+}
+
+function saveToStorage() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ progressState })); } catch (e) { /* ignore */ }
+}
+
+function initGame() {
+  const hadProgress = loadFromStorage();
+  if (!hadProgress) {
+    EXERCISES.forEach(ex => { progressState[ex.word] = { completed: false }; });
+  } else {
+    // Убедимся, что все слова из списка есть в прогрессе
+    EXERCISES.forEach(ex => { if (!progressState[ex.word]) progressState[ex.word] = { completed: false }; });
+  }
+  
+  // Найти первое невыполненное упражнение
+  currentExerciseIndex = EXERCISES.findIndex(ex => !progressState[ex.word].completed);
+  if (currentExerciseIndex === -1) {
+      currentExerciseIndex = 0; // Все выполнено, начнем с начала или покажем экран победы
+  }
+  
+  loadExercise(currentExerciseIndex);
+  updateProgress();
+}
+
+/* ====== Логика игры ====== */
+function loadExercise(index) {
+    if (index >= EXERCISES.length) {
+        finishGame();
+        return;
+    }
+
+    const exercise = EXERCISES[index];
+    currentExerciseIndex = index;
+
+    imageEl.src = exercise.image;
+    imageEl.alt = `Изображение: ${exercise.word}`;
+    currentWordIndexLabel.textContent = `№${index + 1}`;
+    feedback.textContent = '';
+    checkBtn.disabled = false;
+
+    inputsContainer.innerHTML = '';
+    const partial = exercise.partial.replace(/\s/g, '_'); // Заменяем пробелы на подчеркивания для единообразия
+
+    for (let i = 0; i < partial.length; i++) {
+        const char = partial[i];
+        let el;
+        if (char === '_') {
+            el = document.createElement('input');
+            el.type = 'text';
+            el.className = 'letter-box input';
+            el.maxLength = 1;
+            el.dataset.index = i;
+            
+            // Авто-переход к следующему полю ввода
+            el.addEventListener('input', (e) => {
+                const target = e.target;
+                if (target.value.length === target.maxLength) {
+                    const nextInput = inputsContainer.querySelector(`input[data-index="${parseInt(target.dataset.index) + 1}"]`);
+                    if (nextInput) {
+                        nextInput.focus();
+                    } else {
+                        target.blur(); // Последнее поле, убираем фокус
+                    }
+                }
+            });
+
+        } else {
+            el = document.createElement('span');
+            el.className = 'letter-box given';
+            el.textContent = char;
+        }
+        inputsContainer.appendChild(el);
+    }
+    
+    // Фокус на первом поле ввода
+    const firstInput = inputsContainer.querySelector('input');
+    if (firstInput) firstInput.focus();
+}
+
+function checkAnswer() {
+    const exercise = EXERCISES[currentExerciseIndex];
+    const inputs = inputsContainer.querySelectorAll('.letter-box');
+    
+    let userAnswer = '';
+    let allFilled = true;
+    inputs.forEach(el => {
+        if (el.tagName === 'INPUT') {
+            if (el.value === '') allFilled = false;
+            userAnswer += el.value.toLowerCase();
+        } else {
+            userAnswer += el.textContent.toLowerCase();
+        }
+    });
+
+    if (!allFilled) {
+        feedback.innerHTML = '<span style="color:#b45309">Заполните все ячейки.</span>';
+        return;
+    }
+
+    if (userAnswer === exercise.word) {
+        feedback.innerHTML = '<span style="color:green;font-weight:600">Верно! Отлично! 🎉</span>';
+        progressState[exercise.word].completed = true;
+        saveToStorage();
+        updateProgress();
+        checkBtn.disabled = true;
+
+        inputs.forEach(el => el.classList.add('correct'));
+
+        setTimeout(() => {
+            let nextIndex = EXERCISES.findIndex(ex => !progressState[ex.word].completed);
+            if (nextIndex === -1) {
+                finishGame();
+            } else {
+                loadExercise(nextIndex);
+            }
+        }, 1200);
+
+    } else {
+        feedback.innerHTML = '<span style="color:#b91c1c">Ошибка, попробуй еще раз.</span>';
+        inputs.forEach(el => {
+            if (el.tagName === 'INPUT') {
+                el.classList.add('wrong');
+            }
+        });
+        setTimeout(() => inputs.forEach(el => el.classList.remove('wrong')), 800);
+    }
+}
+
+function updateProgress() {
+    const total = EXERCISES.length;
+    const completed = Object.values(progressState).filter(s => s.completed).length;
+    const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+    
+    progressBar.style.width = pct + '%';
+    progressText.textContent = `${completed} / ${total}`;
+}
+
+function finishGame() {
+    inputsContainer.innerHTML = '';
+    imageEl.style.display = 'none';
+    checkBtn.style.display = 'none';
+    currentWordIndexLabel.textContent = '—';
+    feedback.innerHTML = '<b>Поздравляем! Все слова отгаданы! 👍</b>';
+}
+
+/* ====== События ====== */
+checkBtn.addEventListener('click', checkAnswer);
+// Позволяет нажимать Enter для проверки
+inputsContainer.addEventListener('keyup', (e) => {
+    if (e.key === 'Enter') {
+        checkBtn.click();
+    }
+});
+restartBtn.addEventListener('click', () => {
+    if (confirm('Начать заново и сбросить весь прогресс?')) {
+        localStorage.removeItem(STORAGE_KEY);
+        progressState = {}; // Очищаем состояние
+        initGame();
+        imageEl.style.display = 'block';
+        checkBtn.style.display = 'inline-block';
+    }
+});
+
+/* ====== Запуск ====== */
+initGame();
+
+</script>
+</body>
+</html>
